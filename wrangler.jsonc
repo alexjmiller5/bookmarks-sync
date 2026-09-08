@@ -1,6 +1,6 @@
 {
 	"$schema": "./node_modules/wrangler/config-schema.json",
-	"name": "github-bookmarks-sync",
+	"name": "bookmarks-sync",
 	"compatibility_date": "2026-07-06",
 	"compatibility_flags": ["nodejs_als"],
 	// Custom entry wrapping the SvelteKit build output to add scheduled()

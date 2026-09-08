@@ -1,4 +1,4 @@
-# github-bookmarks-sync
+# bookmarks-sync
 
 One-way sync of GitHub starred repos into the Notion Bookmarks DB. Upserts
 by repo URL (the unique key), tags each entry "Github". Runs as a Cloudflare
@@ -40,8 +40,8 @@ structured `sync_run` JSON log line (starred/created/skipped/unstarred/errors)
   secret (see `.env.tpl`); append `?dry_run=true` to diff without writing:
 
   ```bash
-  curl -X POST "https://github-bookmarks-sync.<subdomain>.workers.dev/api/sync" \
-    -H "Authorization: Bearer $(op read 'op://GitHub-Bookmarks-Sync/GitHub-Bookmarks-Sync Sync Token/token')"
+  curl -X POST "https://bookmarks-sync.<subdomain>.workers.dev/api/sync" \
+    -H "Authorization: Bearer $(op read 'op://Bookmarks Sync/Bookmarks Sync Sync Token/token')"
   ```
 
   The shared-secret header is a stopgap until Cloudflare Access fronts this
@@ -101,8 +101,8 @@ deploy:
       with:
         export-env: true
       env:
-        CLOUDFLARE_API_TOKEN: op://GitHub-Bookmarks-Sync/cloudflare/api-token
-        CLOUDFLARE_ACCOUNT_ID: op://GitHub-Bookmarks-Sync/cloudflare/account-id
+        CLOUDFLARE_API_TOKEN: op://Bookmarks Sync/cloudflare/api-token
+        CLOUDFLARE_ACCOUNT_ID: op://Bookmarks Sync/cloudflare/account-id
     - run: bun install --frozen-lockfile
     - run: bun run build
     - run: bunx wrangler deploy
@@ -117,30 +117,30 @@ these are manual. Run once:
 
 ```bash
 # 1. Project vault + credential items
-op vault create "GitHub-Bookmarks-Sync"
-op item create --category "API Credential" --title "GitHub-Bookmarks-Sync GitHub PAT" \
-  --vault "GitHub-Bookmarks-Sync" "token[concealed]=<a GitHub PAT with read:user scope, for reading your starred repos>"
-op item create --category "API Credential" --title "GitHub-Bookmarks-Sync Notion API Key" \
-  --vault "GitHub-Bookmarks-Sync" "token[concealed]=<a Notion internal integration secret with access to the Bookmarks DB>"
-op item create --category "API Credential" --title "GitHub-Bookmarks-Sync Sync Token" \
-  --vault "GitHub-Bookmarks-Sync" "token[concealed]=$(openssl rand -hex 32)"
+op vault create "Bookmarks Sync"
+op item create --category "API Credential" --title "Bookmarks Sync GitHub PAT" \
+  --vault "Bookmarks Sync" "token[concealed]=<a GitHub PAT with read:user scope, for reading your starred repos>"
+op item create --category "API Credential" --title "Bookmarks Sync Notion API Key" \
+  --vault "Bookmarks Sync" "token[concealed]=<a Notion internal integration secret with access to the Bookmarks DB>"
+op item create --category "API Credential" --title "Bookmarks Sync Sync Token" \
+  --vault "Bookmarks Sync" "token[concealed]=$(openssl rand -hex 32)"
 # CI deploy creds (for the future deploy job — see the CI section above)
 op item create --category "API Credential" --title "cloudflare" \
-  --vault "GitHub-Bookmarks-Sync" \
+  --vault "Bookmarks Sync" \
   "api-token[concealed]=<CF API token with Workers edit>" \
   "account-id[text]=<CF account id>"
 
 # 2. Read-only CI service account, token stored in your own vault
-OUT=$(op service-account create "github-bookmarks-sync-ci" \
-  --vault "GitHub-Bookmarks-Sync:read_items" --format json </dev/null)
+OUT=$(op service-account create "bookmarks-sync-ci" \
+  --vault "Bookmarks Sync:read_items" --format json </dev/null)
 op item create --category "API Credential" \
-  --title "GitHub-Bookmarks-Sync CI op Service Account Token" --vault "<your vault>" \
+  --title "Bookmarks Sync CI op Service Account Token" --vault "<your vault>" \
   "token[concealed]=$(echo "$OUT" | jq -r .token)" </dev/null
 
 # 3. GitHub repo + the single CI secret
 gh repo create <owner>/<repo> --source . --push
 gh secret set OP_SERVICE_ACCOUNT_TOKEN \
-  --body "$(op read 'op://<your vault>/GitHub-Bookmarks-Sync CI op Service Account Token/token')"
+  --body "$(op read 'op://<your vault>/Bookmarks Sync CI op Service Account Token/token')"
 
 # 4. Push Worker secrets (GITHUB_TOKEN, NOTION_API_KEY, SYNC_TOKEN)
 just sync-secrets

@@ -1,6 +1,6 @@
 # AGENTS.md
 
-github-bookmarks-sync: one-way sync of GitHub starred repos → Notion
+bookmarks-sync: one-way sync of GitHub starred repos → Notion
 Bookmarks DB (upsert by URL, tagged "Github"). Cloudflare Worker (cf-site
 template) with a minimal status page; sync runs as a server route on a CF
 cron trigger + manual endpoint.
@@ -13,7 +13,7 @@ cron trigger + manual endpoint.
   need caching beyond Notion.
 - **One-way sync only** (GitHub → Notion) for now.
 - Secrets: `GITHUB_TOKEN`, `NOTION_API_KEY`, `SYNC_TOKEN` (see `.env.tpl`;
-  vault `GitHub-Bookmarks-Sync`). Plain config (`NOTION_DATA_SOURCE_ID`)
+  vault `Bookmarks Sync`). Plain config (`NOTION_DATA_SOURCE_ID`)
   lives under `vars` in wrangler.jsonc, not in `.env.tpl`.
 - **Cron**: daily 06:00 UTC via `triggers.crons` in wrangler.jsonc; manual
   runs via `POST /api/sync` with `Authorization: Bearer $SYNC_TOKEN` — a

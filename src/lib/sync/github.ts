@@ -13,7 +13,7 @@ export async function fetchStarredRepos(token: string): Promise<StarredRepo[]> {
 			headers: {
 				Accept: 'application/vnd.github+json',
 				Authorization: `Bearer ${token}`,
-				'User-Agent': 'github-bookmarks-sync'
+				'User-Agent': 'bookmarks-sync'
 			}
 		});
 		if (!res.ok) throw new Error(`GitHub ${res.status}: ${await res.text()}`);

@@ -4,7 +4,7 @@
 // which wraps this build output to add scheduled()). Deploys use wrangler.jsonc.
 {
 	"$schema": "./node_modules/wrangler/config-schema.json",
-	"name": "github-bookmarks-sync",
+	"name": "bookmarks-sync",
 	"compatibility_date": "2026-07-06",
 	"main": ".svelte-kit/cloudflare/_worker.js",
 	"assets": {
