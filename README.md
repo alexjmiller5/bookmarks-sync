@@ -78,79 +78,41 @@ and adds the cron handler.
 
 ## CI
 
-`.github/workflows/ci.yml` runs `just check` + `just test` on push/PR. Tests
-mock all HTTP, so CI needs zero secrets.
+`.github/workflows/ci.yml` runs static checks and mocked tests on push/PR.
+`.github/workflows/deploy.yml` tests, builds, deploys the Worker, and syncs
+runtime secrets on pushes to main. The only GitHub secret is the project's
+`OP_SERVICE_ACCOUNT_TOKEN`; deployment credentials come from its own vault.
 
-There is deliberately **no deploy job yet** — it needs the 1P vault + service
-account from the setup section below. Once those exist, add a `deploy` job to
-the same workflow (push-to-main only), with `OP_SERVICE_ACCOUNT_TOKEN` as the
-repo's single GH secret:
+## Setup
 
-```yaml
-deploy:
-  needs: ci
-  if: github.ref == 'refs/heads/main'
-  runs-on: ubuntu-latest
-  env:
-    OP_SERVICE_ACCOUNT_TOKEN: ${{ secrets.OP_SERVICE_ACCOUNT_TOKEN }}
-  steps:
-    - uses: actions/checkout@v4
-    - uses: oven-sh/setup-bun@v2
-    - uses: 1Password/install-cli-action@v4
-    - uses: 1password/load-secrets-action@v2
-      with:
-        export-env: true
-      env:
-        CLOUDFLARE_API_TOKEN: op://Bookmarks Sync/cloudflare/api-token
-        CLOUDFLARE_ACCOUNT_ID: op://Bookmarks Sync/cloudflare/account-id
-    - run: bun install --frozen-lockfile
-    - run: bun run build
-    - run: bunx wrangler deploy
-    # after deploy — `wrangler secret put` needs the Worker to exist
-    - run: ./scripts/sync-secrets.sh
-```
+1. Create a dedicated GitHub fine-grained personal access token with
+   **Starring: read** for the authenticated user's starred repositories.
+   No repository writes or account administration permissions are needed.
+   See [GitHub's endpoint permissions](https://docs.github.com/en/rest/activity/starring#list-repositories-starred-by-the-authenticated-user).
+2. Create a dedicated Notion internal integration with read and insert content
+   capabilities, and connect it only to the Bookmarks database.
+3. Set the Bookmarks data-source ID in `wrangler.jsonc` under
+   `vars.NOTION_DATA_SOURCE_ID`.
+4. Bootstrap from a desktop-authenticated 1Password shell:
 
-## One-time setup
+   ```bash
+   op-project-bootstrap .env.tpl --repo <owner>/<repo>
+   ```
 
-A 1Password service account cannot create vaults or service accounts, so
-these are manual. Run once:
+   This creates the project vault, ENV and CI credential items, read-only
+   service account, and GitHub secret. `scripts/provision.py` mints the
+   Cloudflare deployment credential and random manual-sync token. Supply the
+   newly created GitHub and Notion credentials when prompted. Never copy
+   credentials from an agent or another project.
 
-```bash
-# 1. Project vault + credential items
-op vault create "Bookmarks Sync"
-op item create --category "API Credential" --title "Bookmarks Sync GitHub PAT" \
-  --vault "Bookmarks Sync" "token[concealed]=<a GitHub PAT with read:user scope, for reading your starred repos>"
-op item create --category "API Credential" --title "Bookmarks Sync Notion API Key" \
-  --vault "Bookmarks Sync" "token[concealed]=<a Notion internal integration secret with access to the Bookmarks DB>"
-op item create --category "API Credential" --title "Bookmarks Sync Sync Token" \
-  --vault "Bookmarks Sync" "token[concealed]=$(openssl rand -hex 32)"
-# CI deploy creds (for the future deploy job — see the CI section above)
-op item create --category "API Credential" --title "cloudflare" \
-  --vault "Bookmarks Sync" \
-  "api-token[concealed]=<CF API token with Workers edit>" \
-  "account-id[text]=<CF account id>"
+5. Run `op-project-bootstrap --check .env.tpl`, then push to main and verify
+   the deploy workflow succeeded.
 
-# 2. Read-only CI service account, token stored in your own vault
-OUT=$(op service-account create "bookmarks-sync-ci" \
-  --vault "Bookmarks Sync:read_items" --format json </dev/null)
-op item create --category "API Credential" \
-  --title "Bookmarks Sync CI op Service Account Token" --vault "<your vault>" \
-  "token[concealed]=$(echo "$OUT" | jq -r .token)" </dev/null
+The project owns its Worker, cron, vault, and deployment token. It consumes
+GitHub and the Notion Bookmarks database through their supported APIs.
+Cloudflare's Workers Scripts Write permission applies to the deployment
+account, so token separation gives independent rotation without enforcing
+per-Worker access. The provisioner grants no R2, D1, DNS, or Access permissions.
 
-# 3. GitHub repo + the single CI secret
-gh repo create <owner>/<repo> --source . --push
-gh secret set OP_SERVICE_ACCOUNT_TOKEN \
-  --body "$(op read 'op://<your vault>/Bookmarks Sync CI op Service Account Token/token')"
-
-# 4. Push Worker secrets (GITHUB_TOKEN, NOTION_API_KEY, SYNC_TOKEN)
-just sync-secrets
-```
-
-Also:
-
-- Share the Notion integration with the Bookmarks DB (Notion UI:
-  Bookmarks DB → connections → add the integration).
-- Set `NOTION_DATA_SOURCE_ID` (under `vars` in `wrangler.jsonc`) to your
-  Bookmarks DB's data-source id — plain config, not a secret, so it lives in
-  the wrangler config rather than `.env.tpl`. Both the Worker and
-  `scripts/dry-run.ts` read it from there.
+To rotate a credential, mint and store its replacement, deploy, and verify
+its actual API operations before revoking the predecessor by provider ID.

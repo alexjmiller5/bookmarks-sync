@@ -12,6 +12,12 @@ cron trigger + manual endpoint.
   is the unique key). Add an R2 binding to wrangler.jsonc only if we later
   need caching beyond Notion.
 - **One-way sync only** (GitHub → Notion) for now.
+- **Owned infrastructure:** the `bookmarks-sync` Worker and its cron, the
+  Bookmarks Sync vault, and its CI service account. The deployment token is
+  minted by `scripts/provision.py` with Workers Scripts Write on the deployment
+  account. Cloudflare enforces that permission at account scope, so separate
+  tokens provide independent rotation but do not prevent access to sibling
+  Workers. CI has no DNS, R2, D1, or Access administration permissions.
 - Secrets: `GITHUB_TOKEN`, `NOTION_API_KEY`, `SYNC_TOKEN` (see `.env.tpl`;
   vault `Bookmarks Sync`). Plain config (`NOTION_DATA_SOURCE_ID`)
   lives under `vars` in wrangler.jsonc, not in `.env.tpl`.
@@ -78,5 +84,5 @@ not a script catalog; one-offs go in `scripts/` and run directly.
 Write the test first (`*.spec.ts` next to the code, or `src/**/*.svelte.spec.ts`
 for components), then the code. Tests mock all HTTP — CI
 (`.github/workflows/ci.yml`: `just check` + `just test` on push/PR) needs no
-secrets. No deploy job yet; the future shape is documented in the README's CI
-section.
+secrets. `.github/workflows/deploy.yml` tests, builds, deploys, and syncs
+runtime secrets on pushes to main using the project's own deployment token.

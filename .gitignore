@@ -24,3 +24,6 @@ vite.config.ts.timestamp-*
 
 # 1Password secrets manifest (op:// refs only) IS committed
 !.env.tpl
+
+# Provisioning scripts
+__pycache__/

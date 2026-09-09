@@ -1,0 +1,37 @@
+name: deploy
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    # The one GH secret: this project's 1Password service-account token (see
+    # new-project skill). It authenticates op for BOTH reading the deploy creds
+    # and pushing the Worker secrets — CI owns the full deploy, no manual sync.
+    env:
+      OP_SERVICE_ACCOUNT_TOKEN: ${{ secrets.OP_SERVICE_ACCOUNT_TOKEN }}
+    steps:
+      - uses: actions/checkout@v7
+      - uses: oven-sh/setup-bun@v2
+      - uses: 1Password/install-cli-action@v4
+      # op:// refs below are BY NAME on purpose: op-project-bootstrap parses this file
+      # to provision/verify the vault + items, and names are its input (an ID can't name
+      # a vault that doesn't exist yet). The ONE exception to the IDs-over-names rule -
+      # do NOT convert these to IDs. See global AGENTS.md. Renamed an item? Update here.
+      - uses: 1password/load-secrets-action@v5
+        with:
+          export-env: true
+        env:
+          CLOUDFLARE_API_TOKEN: op://Bookmarks Sync/Bookmarks Sync CI Cloudflare Token/api-token
+          CLOUDFLARE_ACCOUNT_ID: op://Bookmarks Sync/Bookmarks Sync CI Cloudflare Token/account-id
+      - run: bun install --frozen-lockfile
+      - run: bun run test
+      - run: bun run build
+      - run: bunx wrangler deploy
+      # Secrets AFTER deploy — `wrangler secret put` needs the Worker to exist.
+      # Delete this step + scripts/sync-secrets.sh if the site has no secrets.
+      - name: Push Worker secrets
+        run: ./scripts/sync-secrets.sh
