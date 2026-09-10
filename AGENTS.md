@@ -21,6 +21,21 @@ cron trigger + manual endpoint.
 - Secrets: `GITHUB_TOKEN`, `NOTION_API_KEY`, `SYNC_TOKEN` (see `.env.tpl`;
   vault `Bookmarks Sync`). Plain config (`NOTION_DATA_SOURCE_ID`)
   lives under `vars` in wrangler.jsonc, not in `.env.tpl`.
+- **GitHub access:** `GITHUB_TOKEN` is this project's independently minted
+  fine-grained PAT. It has Starring read and repository Metadata read on all
+  current and future repositories owned by the authenticated account, which
+  preserves private-star discovery without granting source-code or write
+  access. GitHub limits a fine-grained PAT to one resource owner; adding stars
+  from another owner's private repositories requires reviewing that boundary.
+  Renew through GitHub's token settings before its recorded expiration, store
+  the replacement in this project's ENV item, and compare complete paginated
+  star identities before deploying. Never use the agent's GitHub PAT at runtime.
+- **Notion access:** `NOTION_API_KEY` belongs to this project's internal
+  integration, with Read content and Insert content only. Its sole content
+  grant is the Bookmarks database configured in `wrangler.jsonc`; it cannot
+  update content, use comments, read user information, or access unrelated
+  databases. This approved shared-service connection uses Notion's API and
+  this project's own credential. Never deploy the agent's integration secret.
 - **Cron**: daily 06:00 UTC via `triggers.crons` in wrangler.jsonc; manual
   runs via `POST /api/sync` with `Authorization: Bearer $SYNC_TOKEN` — a
   stopgap until CF Access fronts the Worker.
