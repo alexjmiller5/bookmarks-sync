@@ -21,12 +21,15 @@ function headers(token: string) {
 }
 
 async function hub<T>(env: HubEnv, path: string, body: unknown): Promise<T> {
-	const doFetch = env.LIFE_HUB?.fetch ?? fetch;
-	const res = await doFetch(`${env.LIFE_HUB_URL.replace(/\/$/, '')}${path}`, {
-		method: 'POST',
-		headers: headers(env.LIFE_HUB_TOKEN),
-		body: JSON.stringify(body)
-	});
+	// Call through the binding object: a detached `fetch` throws Illegal invocation.
+	const res = await (env.LIFE_HUB ?? globalThis).fetch(
+		`${env.LIFE_HUB_URL.replace(/\/$/, '')}${path}`,
+		{
+			method: 'POST',
+			headers: headers(env.LIFE_HUB_TOKEN),
+			body: JSON.stringify(body)
+		}
+	);
 	if (!res.ok) throw new Error(`life-data ${path} ${res.status}: ${await res.text()}`);
 	return (await res.json()) as T;
 }
