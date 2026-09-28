@@ -1,5 +1,5 @@
 import type { StarredRepo } from './github';
-import type { Bookmark } from './notion';
+import type { Bookmark } from './lifedata';
 
 /** Canonical form for URL matching: lowercase host, no trailing slash. */
 export function normalizeUrl(raw: string): string {
@@ -16,7 +16,7 @@ export interface DiffResult {
 	unstarred: Bookmark[]; // NEVER deleted — logged only; bookmarks may be kept intentionally
 }
 
-/** Pure diff of GitHub stars vs existing Notion bookmarks, keyed by normalized URL. */
+/** Pure diff of GitHub stars vs existing life-data bookmarks, keyed by normalized URL. */
 export function diffStars(starred: StarredRepo[], existing: Bookmark[]): DiffResult {
 	const existingByUrl = new Set(existing.map((b) => normalizeUrl(b.url)));
 	const starredUrls = new Set(starred.map((r) => normalizeUrl(r.htmlUrl)));

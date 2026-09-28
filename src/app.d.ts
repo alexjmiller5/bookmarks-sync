@@ -5,7 +5,7 @@ declare global {
 	// see them, so they're declared here and merged into the generated Env.
 	interface Env {
 		GITHUB_TOKEN: string;
-		NOTION_API_KEY: string;
+		LIFE_HUB_TOKEN: string;
 		SYNC_TOKEN: string;
 	}
 

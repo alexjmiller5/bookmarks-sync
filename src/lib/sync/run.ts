@@ -1,11 +1,11 @@
 import { fetchStarredRepos } from './github';
-import { fetchGithubBookmarks, createBookmark } from './notion';
+import { fetchGithubBookmarks, createBookmark } from './lifedata';
 import { diffStars } from './diff';
 
 export interface SyncEnv {
 	GITHUB_TOKEN: string;
-	NOTION_API_KEY: string;
-	NOTION_DATA_SOURCE_ID: string;
+	LIFE_HUB_URL: string;
+	LIFE_HUB_TOKEN: string;
 }
 
 export interface SyncSummary {
@@ -14,7 +14,7 @@ export interface SyncSummary {
 	starred: number;
 	created: number;
 	skipped: number;
-	toCreate: string[]; // repo fullNames not yet in Notion
+	toCreate: string[]; // repo fullNames not yet in life-data
 	unstarred: string[]; // bookmark URLs no longer starred — reported, never deleted
 	errors: string[];
 }
@@ -27,17 +27,17 @@ export async function runSync(
 	const dryRun = opts.dryRun ?? false;
 	const [starred, existing] = await Promise.all([
 		fetchStarredRepos(env.GITHUB_TOKEN),
-		fetchGithubBookmarks(env.NOTION_API_KEY, env.NOTION_DATA_SOURCE_ID)
+		fetchGithubBookmarks(env)
 	]);
 	const diff = diffStars(starred, existing);
 
 	let created = 0;
 	const errors: string[] = [];
 	if (!dryRun) {
-		// ponytail: sequential creates — stays under Notion's ~3 req/s without a rate limiter
+		// ponytail: sequential pushes - one row per request keeps a rejection attributable
 		for (const repo of diff.toCreate) {
 			try {
-				await createBookmark(env.NOTION_API_KEY, env.NOTION_DATA_SOURCE_ID, repo);
+				await createBookmark(env, repo);
 				created++;
 			} catch (e) {
 				errors.push(`${repo.fullName}: ${e instanceof Error ? e.message : String(e)}`);

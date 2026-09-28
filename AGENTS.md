@@ -1,26 +1,26 @@
 # AGENTS.md
 
-bookmarks-sync: one-way sync of GitHub starred repos → Notion
-Bookmarks DB (upsert by URL, tagged "Github"). Cloudflare Worker (cf-site
+bookmarks-sync: one-way sync of GitHub starred repos → the life-data
+`bookmarks` table (upsert by URL, tagged "Github"). Cloudflare Worker (cf-site
 template) with a minimal status page; sync runs as a server route on a CF
 cron trigger + manual endpoint.
 
 ## Project decisions
 
 - **CF Worker, not modal-service**: wrangler.jsonc IS the IaC — no terraform.
-- **No R2 for MVP**: sync state lives in the Notion Bookmarks DB itself (URL
-  is the unique key). Add an R2 binding to wrangler.jsonc only if we later
-  need caching beyond Notion.
-- **One-way sync only** (GitHub → Notion) for now.
+- **No R2 for MVP**: sync state lives in the life-data `bookmarks` table
+  itself (URL is the unique key). Add an R2 binding to wrangler.jsonc only if
+  we later need caching beyond the hub.
+- **One-way sync only** (GitHub → life-data) for now.
 - **Owned infrastructure:** the `bookmarks-sync` Worker and its cron, the
   Bookmarks Sync vault, and its CI service account. The deployment token is
   minted by `scripts/provision.py` with Workers Scripts Write on the deployment
   account. Cloudflare enforces that permission at account scope, so separate
   tokens provide independent rotation but do not prevent access to sibling
   Workers. CI has no DNS, R2, D1, or Access administration permissions.
-- Secrets: `GITHUB_TOKEN`, `NOTION_API_KEY`, `SYNC_TOKEN` (see `.env.tpl`;
-  vault `Bookmarks Sync`). Plain config (`NOTION_DATA_SOURCE_ID`)
-  lives under `vars` in wrangler.jsonc, not in `.env.tpl`.
+- Secrets: `GITHUB_TOKEN`, `LIFE_HUB_TOKEN`, `SYNC_TOKEN` (see `.env.tpl`;
+  vault `Bookmarks Sync`). Plain config (`LIFE_HUB_URL`) lives under `vars`
+  in wrangler.jsonc, not in `.env.tpl`.
 - **GitHub access:** `GITHUB_TOKEN` is this project's independently minted
   fine-grained PAT. It has Starring read and repository Metadata read on all
   current and future repositories owned by the authenticated account, which
@@ -30,12 +30,16 @@ cron trigger + manual endpoint.
   Renew through GitHub's token settings before its recorded expiration, store
   the replacement in this project's ENV item, and compare complete paginated
   star identities before deploying. Never use the agent's GitHub PAT at runtime.
-- **Notion access:** `NOTION_API_KEY` belongs to this project's internal
-  integration, with Read content and Insert content only. Its sole content
-  grant is the Bookmarks database configured in `wrangler.jsonc`; it cannot
-  update content, use comments, read user information, or access unrelated
-  databases. This approved shared-service connection uses Notion's API and
-  this project's own credential. Never deploy the agent's integration secret.
+- **life-data access:** `LIFE_HUB_TOKEN` is this project's own hub token
+  (`life token create bookmarks-sync --scopes tables:read,tables:write`),
+  scoped to row pulls and pushes; it holds no admin or file grants. The
+  Worker reads the `bookmarks` table's live Github-tagged rows
+  (`POST /v1/rows/pull`) and pushes one catalog-valid row per new star
+  (`POST /v1/rows/push`: fresh 32-hex id, `url`, `title`, `description` with no
+  trailing period, `tags` `["Github"]`, `updated_at` ISO-8601 UTC ms). The
+  catalog enforces the one-bookmark-per-url and Github-tag rules; a rejected
+  row is reported in the run summary, never retried blindly. Never deploy
+  the agent's hub token.
 - **Cron**: daily 06:00 UTC via `triggers.crons` in wrangler.jsonc; manual
   runs via `POST /api/sync` with `Authorization: Bearer $SYNC_TOKEN` — a
   stopgap until CF Access fronts the Worker.

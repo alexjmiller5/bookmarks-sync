@@ -1,10 +1,10 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { runSync } from './run';
 import { fetchStarredRepos, type StarredRepo } from './github';
-import { fetchGithubBookmarks, createBookmark, type Bookmark } from './notion';
+import { fetchGithubBookmarks, createBookmark, type Bookmark } from './lifedata';
 
 vi.mock('./github', () => ({ fetchStarredRepos: vi.fn() }));
-vi.mock('./notion', () => ({ fetchGithubBookmarks: vi.fn(), createBookmark: vi.fn() }));
+vi.mock('./lifedata', () => ({ fetchGithubBookmarks: vi.fn(), createBookmark: vi.fn() }));
 
 const repo = (n: number): StarredRepo => ({
 	fullName: `owner/repo${n}`,
@@ -12,11 +12,11 @@ const repo = (n: number): StarredRepo => ({
 	htmlUrl: `https://github.com/owner/repo${n}`
 });
 const bookmark = (n: number): Bookmark => ({
-	pageId: `page-${n}`,
+	id: `row-${n}`,
 	url: `https://github.com/owner/repo${n}`
 });
 
-const env = { GITHUB_TOKEN: 'gh', NOTION_API_KEY: 'nk', NOTION_DATA_SOURCE_ID: 'ds' };
+const env = { GITHUB_TOKEN: 'gh', LIFE_HUB_URL: 'https://hub.example', LIFE_HUB_TOKEN: 'lt' };
 
 beforeEach(() => {
 	vi.clearAllMocks();
@@ -32,7 +32,7 @@ describe('runSync', () => {
 		const summary = await runSync(env, { trigger: 'test' });
 
 		expect(createBookmark).toHaveBeenCalledTimes(1);
-		expect(createBookmark).toHaveBeenCalledWith('nk', 'ds', repo(1));
+		expect(createBookmark).toHaveBeenCalledWith(env, repo(1));
 		expect(summary).toMatchObject({
 			trigger: 'test',
 			dryRun: false,
@@ -63,14 +63,14 @@ describe('runSync', () => {
 		vi.mocked(fetchStarredRepos).mockResolvedValue([repo(1), repo(2)]);
 		vi.mocked(fetchGithubBookmarks).mockResolvedValue([]);
 		vi.mocked(createBookmark)
-			.mockRejectedValueOnce(new Error('Notion create 500: boom'))
+			.mockRejectedValueOnce(new Error('life-data /v1/rows/push 500: boom'))
 			.mockResolvedValueOnce();
 
 		const summary = await runSync(env, { trigger: 'test' });
 
 		expect(createBookmark).toHaveBeenCalledTimes(2);
 		expect(summary.created).toBe(1);
-		expect(summary.errors).toEqual(['owner/repo1: Notion create 500: boom']);
+		expect(summary.errors).toEqual(['owner/repo1: life-data /v1/rows/push 500: boom']);
 	});
 
 	it('emits one structured log line with the summary', async () => {

@@ -1,14 +1,14 @@
 import { describe, it, expect } from 'vitest';
 import { normalizeUrl, diffStars } from './diff';
 import type { StarredRepo } from './github';
-import type { Bookmark } from './notion';
+import type { Bookmark } from './lifedata';
 
 const repo = (fullName: string, htmlUrl: string): StarredRepo => ({
 	fullName,
 	description: null,
 	htmlUrl
 });
-const bookmark = (url: string): Bookmark => ({ pageId: `page-${url}`, url });
+const bookmark = (url: string): Bookmark => ({ id: `page-${url}`, url });
 
 describe('normalizeUrl', () => {
 	it('lowercases the host', () => {

@@ -7,8 +7,8 @@
 	"main": "src/worker.ts",
 	// Daily sync at 06:00 UTC (free CF cron; deliberately not a Modal slot)
 	"triggers": { "crons": ["0 6 * * *"] },
-	// Plain config (not a secret): the Notion Bookmarks DB data-source id
-	"vars": { "NOTION_DATA_SOURCE_ID": "2a803953-a8af-80bf-a145-000b8cf4f5e0" },
+	// Plain config (not a secret): the life-data hub this Worker writes bookmarks to
+	"vars": { "LIFE_HUB_URL": "https://life-data.nqipomyrjb.workers.dev" },
 	"assets": {
 		"binding": "ASSETS",
 		"directory": ".svelte-kit/cloudflare"

@@ -4,5 +4,5 @@
 # Local dev:      op run --env-file=.env.tpl -- bun run dev
 # Push to CF:     just sync-secrets
 GITHUB_TOKEN=op://Bookmarks Sync/Bookmarks Sync ENV/GITHUB_TOKEN
-NOTION_API_KEY=op://Bookmarks Sync/Bookmarks Sync ENV/NOTION_API_KEY
+LIFE_HUB_TOKEN=op://Bookmarks Sync/Bookmarks Sync ENV/LIFE_HUB_TOKEN
 SYNC_TOKEN=op://Bookmarks Sync/Bookmarks Sync ENV/SYNC_TOKEN
