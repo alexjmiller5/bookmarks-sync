@@ -8,6 +8,8 @@ export interface Bookmark {
 export interface HubEnv {
 	LIFE_HUB_URL: string;
 	LIFE_HUB_TOKEN: string;
+	/** Service binding to the hub Worker; a plain fetch is used when absent (tests, local dev). */
+	LIFE_HUB?: { fetch: typeof fetch };
 }
 
 function headers(token: string) {
@@ -19,7 +21,8 @@ function headers(token: string) {
 }
 
 async function hub<T>(env: HubEnv, path: string, body: unknown): Promise<T> {
-	const res = await fetch(`${env.LIFE_HUB_URL.replace(/\/$/, '')}${path}`, {
+	const doFetch = env.LIFE_HUB?.fetch ?? fetch;
+	const res = await doFetch(`${env.LIFE_HUB_URL.replace(/\/$/, '')}${path}`, {
 		method: 'POST',
 		headers: headers(env.LIFE_HUB_TOKEN),
 		body: JSON.stringify(body)

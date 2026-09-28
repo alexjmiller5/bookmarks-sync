@@ -45,6 +45,17 @@ describe('fetchGithubBookmarks', () => {
 		});
 	});
 
+	it('goes through the LIFE_HUB service binding when one is bound', async () => {
+		const bound = vi.fn().mockResolvedValue(jsonResponse({ rows: [] }));
+		const global = vi.fn();
+		vi.stubGlobal('fetch', global);
+
+		await fetchGithubBookmarks({ ...env, LIFE_HUB: { fetch: bound } });
+		expect(bound).toHaveBeenCalledTimes(1);
+		expect(bound.mock.calls[0][0]).toBe('https://hub.example/v1/rows/pull');
+		expect(global).not.toHaveBeenCalled();
+	});
+
 	it('throws on a non-2xx hub response', async () => {
 		vi.stubGlobal('fetch', vi.fn().mockResolvedValue(new Response('nope', { status: 403 })));
 		await expect(fetchGithubBookmarks(env)).rejects.toThrow('403');

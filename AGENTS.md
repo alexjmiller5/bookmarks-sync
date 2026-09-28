@@ -39,7 +39,10 @@ cron trigger + manual endpoint.
   trailing period, `tags` `["Github"]`, `updated_at` ISO-8601 UTC ms). The
   catalog enforces the one-bookmark-per-url and Github-tag rules; a rejected
   row is reported in the run summary, never retried blindly. Never deploy
-  the agent's hub token.
+  the agent's hub token. The hub is reached through the `LIFE_HUB` service
+  binding (wrangler.jsonc `services`): a Worker cannot fetch a sibling
+  workers.dev Worker over the network (Cloudflare error 1042). The binding
+  only carries the same HTTP request the URL would; auth is still the token.
 - **Cron**: daily 06:00 UTC via `triggers.crons` in wrangler.jsonc; manual
   runs via `POST /api/sync` with `Authorization: Bearer $SYNC_TOKEN` — a
   stopgap until CF Access fronts the Worker.

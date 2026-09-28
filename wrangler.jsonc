@@ -9,6 +9,10 @@
 	"triggers": { "crons": ["0 6 * * *"] },
 	// Plain config (not a secret): the life-data hub this Worker writes bookmarks to
 	"vars": { "LIFE_HUB_URL": "https://life-data.nqipomyrjb.workers.dev" },
+	// Workers cannot fetch a sibling workers.dev Worker over the network (CF error
+	// 1042), so the hub's HTTP API is reached through a service binding; the
+	// request shape and the LIFE_HUB_TOKEN auth are unchanged.
+	"services": [{ "binding": "LIFE_HUB", "service": "life-data" }],
 	"assets": {
 		"binding": "ASSETS",
 		"directory": ".svelte-kit/cloudflare"
