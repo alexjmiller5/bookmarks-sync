@@ -5,8 +5,12 @@
 	"compatibility_flags": ["nodejs_als"],
 	// Custom entry wrapping the SvelteKit build output to add scheduled()
 	"main": "src/worker.ts",
-	// Daily sync at 06:00 UTC (free CF cron; deliberately not a Modal slot)
-	"triggers": { "crons": ["0 6 * * *"] },
+	// Hourly sync (free CF cron; deliberately not a Modal slot). Each run spends at
+	// most MAX_GITHUB_WRITES GitHub writes, so a large backlog drains over hours.
+	"triggers": { "crons": ["0 * * * *"] },
+	// The sync base (last agreed state) lives in one SQLite-backed Durable Object.
+	"durable_objects": { "bindings": [{ "name": "SYNC_STATE", "class_name": "SyncState" }] },
+	"migrations": [{ "tag": "v1", "new_sqlite_classes": ["SyncState"] }],
 	// Plain config (not a secret): the life-data hub this Worker writes bookmarks to
 	"vars": { "LIFE_HUB_URL": "https://life-data.nqipomyrjb.workers.dev" },
 	// Workers cannot fetch a sibling workers.dev Worker over the network (CF error

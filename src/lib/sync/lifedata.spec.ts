@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, afterEach } from 'vitest';
-import { fetchGithubBookmarks, createBookmark } from './lifedata';
+import { fetchBookmarks, fetchListTags, writeRows } from './lifedata';
 
 const env = { LIFE_HUB_URL: 'https://hub.example/', LIFE_HUB_TOKEN: 'tok' };
 
@@ -9,38 +9,60 @@ function jsonResponse(body: unknown, status = 200) {
 		headers: { 'content-type': 'application/json' }
 	});
 }
+const body = (m: ReturnType<typeof vi.fn>, i = 0) => JSON.parse(m.mock.calls[i][1].body);
 
 afterEach(() => {
 	vi.unstubAllGlobals();
 });
 
-describe('fetchGithubBookmarks', () => {
-	it('pulls the bookmarks table and keeps live Github-tagged rows with a url', async () => {
+describe('fetchBookmarks', () => {
+	it('keeps live rows with a github repository url and parses tags', async () => {
 		const fetchMock = vi.fn().mockResolvedValue(
 			jsonResponse({
 				rows: [
-					{ id: 'a', url: 'https://github.com/o/r', tags: '["Github"]', deleted_at: null },
-					{ id: 'b', url: 'https://example.com', tags: '["List"]', deleted_at: null },
-					{ id: 'c', url: null, tags: '["Github"]', deleted_at: null },
+					{
+						id: 'a',
+						url: 'https://github.com/o/r',
+						tags: '["Github","Money"]',
+						needs_review: null,
+						deleted_at: null
+					},
+					{
+						id: 'b',
+						url: 'https://example.com',
+						tags: '["List"]',
+						needs_review: null,
+						deleted_at: null
+					},
+					{ id: 'c', url: null, tags: null, needs_review: null, deleted_at: null },
 					{
 						id: 'd',
 						url: 'https://github.com/o/gone',
 						tags: '["Github"]',
+						needs_review: null,
 						deleted_at: '2026-01-01'
+					},
+					{
+						id: 'e',
+						url: 'https://github.com/openrewrite',
+						tags: '["Github"]',
+						needs_review: null,
+						deleted_at: null
 					}
 				]
 			})
 		);
 		vi.stubGlobal('fetch', fetchMock);
 
-		const out = await fetchGithubBookmarks(env);
-		expect(out).toEqual([{ id: 'a', url: 'https://github.com/o/r' }]);
+		expect(await fetchBookmarks(env)).toEqual([
+			{ id: 'a', url: 'https://github.com/o/r', tags: ['Github', 'Money'], needsReview: null }
+		]);
 		const [url, init] = fetchMock.mock.calls[0];
 		expect(url).toBe('https://hub.example/v1/rows/pull');
 		expect(init.headers['Authorization']).toBe('Bearer tok');
-		expect(JSON.parse(init.body)).toEqual({
+		expect(body(fetchMock)).toEqual({
 			table: 'bookmarks',
-			columns: ['id', 'url', 'tags', 'deleted_at'],
+			columns: ['id', 'url', 'tags', 'needs_review', 'deleted_at'],
 			since: ''
 		});
 	});
@@ -49,63 +71,102 @@ describe('fetchGithubBookmarks', () => {
 		const bound = vi.fn().mockResolvedValue(jsonResponse({ rows: [] }));
 		const global = vi.fn();
 		vi.stubGlobal('fetch', global);
-
-		await fetchGithubBookmarks({ ...env, LIFE_HUB: { fetch: bound } });
+		await fetchBookmarks({ ...env, LIFE_HUB: { fetch: bound } });
 		expect(bound).toHaveBeenCalledTimes(1);
-		expect(bound.mock.calls[0][0]).toBe('https://hub.example/v1/rows/pull');
 		expect(global).not.toHaveBeenCalled();
 	});
 
 	it('throws on a non-2xx hub response', async () => {
 		vi.stubGlobal('fetch', vi.fn().mockResolvedValue(new Response('nope', { status: 403 })));
-		await expect(fetchGithubBookmarks(env)).rejects.toThrow('403');
+		await expect(fetchBookmarks(env)).rejects.toThrow('403');
 	});
 });
 
-describe('createBookmark', () => {
-	it('pushes one catalog-valid row: fresh id, Github tag, no trailing period', async () => {
-		const fetchMock = vi.fn().mockResolvedValue(jsonResponse({ upserted: 1, rejected: [] }));
-		vi.stubGlobal('fetch', fetchMock);
-
-		await createBookmark(env, {
-			fullName: 'owner/repo',
-			description: 'A thing.',
-			htmlUrl: 'https://github.com/owner/repo'
-		});
-		const [url, init] = fetchMock.mock.calls[0];
-		expect(url).toBe('https://hub.example/v1/rows/push');
-		const body = JSON.parse(init.body);
-		expect(body.table).toBe('bookmarks');
-		const row = body.rows[0];
-		expect(row.id).toMatch(/^[0-9a-f]{32}$/);
-		expect(row.url).toBe('https://github.com/owner/repo');
-		expect(row.title).toBe('owner/repo: A thing.');
-		expect(row.description).toBe('A thing');
-		expect(row.tags).toEqual(['Github']);
-		expect(row.updated_at).toMatch(/Z$/);
-		expect(body.columns).toEqual(Object.keys(row));
-	});
-
-	it('falls back to fullName when the repo has no description', async () => {
-		const fetchMock = vi.fn().mockResolvedValue(jsonResponse({ upserted: 1, rejected: [] }));
-		vi.stubGlobal('fetch', fetchMock);
-		await createBookmark(env, {
-			fullName: 'o/r',
-			description: null,
-			htmlUrl: 'https://github.com/o/r'
-		});
-		const row = JSON.parse(fetchMock.mock.calls[0][1].body).rows[0];
-		expect(row.title).toBe('o/r');
-		expect(row.description).toBe('o/r');
-	});
-
-	it('throws when the catalog rejects the row', async () => {
-		vi.stubGlobal(
-			'fetch',
-			vi.fn().mockResolvedValue(jsonResponse({ rejected: [{ col: 'tags', message: 'bad' }] }))
+describe('fetchListTags', () => {
+	it('reads the bookmarks.tags options from the catalog, minus Github', async () => {
+		const fetchMock = vi.fn().mockResolvedValue(
+			jsonResponse({
+				properties: [
+					{ id: 'books.tags', options: '[{"v":"Favorite","d":"x"}]' },
+					{
+						id: 'bookmarks.tags',
+						options: '[{"v":"Github","d":"g"},{"v":"Money","d":"Ways to earn or save money."}]'
+					}
+				]
+			})
 		);
-		await expect(
-			createBookmark(env, { fullName: 'o/r', description: 'x', htmlUrl: 'https://github.com/o/r' })
-		).rejects.toThrow('rejected o/r: bad');
+		vi.stubGlobal('fetch', fetchMock);
+
+		expect(await fetchListTags(env)).toEqual([
+			{ name: 'Money', description: 'Ways to earn or save money.' }
+		]);
+		expect(fetchMock.mock.calls[0][0]).toBe('https://hub.example/v1/catalog');
+		expect(fetchMock.mock.calls[0][1].method).toBe('GET');
+	});
+});
+
+describe('writeRows', () => {
+	it('pushes one request per column set and reports per-op success', async () => {
+		const fetchMock = vi
+			.fn()
+			.mockResolvedValueOnce(jsonResponse({ rejected: [] }))
+			.mockResolvedValueOnce(jsonResponse({ rejected: [{ row_id: 'b2', message: 'bad tag' }] }))
+			.mockResolvedValueOnce(jsonResponse({ rejected: [] }));
+		vi.stubGlobal('fetch', fetchMock);
+
+		const out = await writeRows(env, [
+			{
+				op: 'create',
+				repo: { id: 'R1', url: 'https://github.com/o/r', fullName: 'o/r', description: 'A thing.' },
+				tags: ['Github'],
+				needsReview: null
+			},
+			{ op: 'update', bookmarkId: 'b1', tags: ['Github', 'Money'] },
+			{ op: 'update', bookmarkId: 'b2', tags: ['Github', 'Nope'] },
+			{ op: 'delete', bookmarkId: 'b3' }
+		]);
+
+		expect(out.ok).toEqual([true, true, false, true]);
+		expect(out.errors).toEqual(['b2: bad tag']);
+		expect(fetchMock).toHaveBeenCalledTimes(3);
+
+		const create = body(fetchMock, 0);
+		expect(create.table).toBe('bookmarks');
+		const row = create.rows[0];
+		expect(row.id).toMatch(/^[0-9a-f]{32}$/);
+		expect(row).toMatchObject({
+			url: 'https://github.com/o/r',
+			title: 'o/r: A thing.',
+			description: 'A thing',
+			tags: ['Github'],
+			needs_review: null
+		});
+		expect(create.columns).toEqual(Object.keys(row));
+
+		expect(body(fetchMock, 1).rows.map((r: { id: string }) => r.id)).toEqual(['b1', 'b2']);
+		const del = body(fetchMock, 2).rows[0];
+		expect(del.deleted_at).toBe(del.updated_at);
+		expect(del.updated_at).toMatch(/^\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d\.\d{3}Z$/);
+	});
+
+	it('marks a whole group failed when the hub request fails', async () => {
+		vi.stubGlobal('fetch', vi.fn().mockResolvedValue(new Response('down', { status: 503 })));
+		const out = await writeRows(env, [{ op: 'update', bookmarkId: 'b1', needsReview: null }]);
+		expect(out.ok).toEqual([false]);
+		expect(out.errors[0]).toMatch(/503/);
+	});
+
+	it('falls back to the repo name when it has no description', async () => {
+		const fetchMock = vi.fn().mockResolvedValue(jsonResponse({ rejected: [] }));
+		vi.stubGlobal('fetch', fetchMock);
+		await writeRows(env, [
+			{
+				op: 'create',
+				repo: { id: 'R1', url: 'https://github.com/o/r', fullName: 'o/r', description: null },
+				tags: ['Github'],
+				needsReview: null
+			}
+		]);
+		expect(body(fetchMock).rows[0]).toMatchObject({ title: 'o/r', description: 'o/r' });
 	});
 });

@@ -1,15 +1,15 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { POST } from './+server';
-import { runSync } from '$lib/sync/run';
+import { runSync, syncState } from '$lib/sync/run';
 
-vi.mock('$lib/sync/run', () => ({ runSync: vi.fn() }));
+vi.mock('$lib/sync/run', () => ({ runSync: vi.fn(), syncState: vi.fn(() => 'state') }));
 
-function event(opts: { token?: string; env?: Record<string, string>; url?: string }) {
+function event(opts: { token?: string; env?: Record<string, unknown>; url?: string }) {
 	const headers = new Headers(opts.token ? { authorization: `Bearer ${opts.token}` } : {});
 	return {
 		request: new Request(opts.url ?? 'https://x.test/api/sync', { method: 'POST', headers }),
 		platform: {
-			env: opts.env ?? { SYNC_TOKEN: 'sekrit', GITHUB_TOKEN: 'gh', NOTION_API_KEY: 'nk' }
+			env: opts.env ?? { SYNC_TOKEN: 'sekrit', GITHUB_TOKEN: 'gh', SYNC_STATE: 'ns' }
 		}
 		// ponytail: cast — the real RequestEvent carries far more than the handler reads
 	} as unknown as Parameters<typeof POST>[0];
@@ -38,18 +38,23 @@ describe('POST /api/sync', () => {
 		vi.mocked(runSync).mockResolvedValue({ created: 1 } as never);
 		const res = await POST(event({ token: 'sekrit' }));
 		expect(await res.json()).toMatchObject({ created: 1 });
+		expect(syncState).toHaveBeenCalledWith('ns');
 		expect(runSync).toHaveBeenCalledWith(
 			expect.objectContaining({ GITHUB_TOKEN: 'gh' }),
-			expect.objectContaining({ trigger: 'manual', dryRun: false })
+			'state',
+			expect.objectContaining({ trigger: 'manual', dryRun: false, allowRemovals: false })
 		);
 	});
 
-	it('passes dry_run=true through as dryRun', async () => {
+	it('passes dry_run and allow_removals through', async () => {
 		vi.mocked(runSync).mockResolvedValue({} as never);
-		await POST(event({ token: 'sekrit', url: 'https://x.test/api/sync?dry_run=true' }));
+		await POST(
+			event({ token: 'sekrit', url: 'https://x.test/api/sync?dry_run=true&allow_removals=true' })
+		);
 		expect(runSync).toHaveBeenCalledWith(
 			expect.anything(),
-			expect.objectContaining({ dryRun: true })
+			'state',
+			expect.objectContaining({ dryRun: true, allowRemovals: true })
 		);
 	});
 });

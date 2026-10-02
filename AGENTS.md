@@ -1,17 +1,27 @@
 # AGENTS.md
 
-bookmarks-sync: one-way sync of GitHub starred repos → the life-data
-`bookmarks` table (upsert by URL, tagged "Github"). Cloudflare Worker (cf-site
-template) with a minimal status page; sync runs as a server route on a CF
-cron trigger + manual endpoint.
+bookmarks-sync: two-way sync between GitHub and the life-data `bookmarks`
+table. Stars are GitHub-tagged bookmarks and GitHub list membership mirrors the
+other tags, via a three-way merge against the last agreed state (semantics in
+README "Sync semantics"). Cloudflare Worker (cf-site template) with a minimal
+status page; sync runs on a CF cron trigger + manual endpoint.
 
 ## Project decisions
 
 - **CF Worker, not modal-service**: wrangler.jsonc IS the IaC — no terraform.
-- **No R2 for MVP**: sync state lives in the life-data `bookmarks` table
-  itself (URL is the unique key). Add an R2 binding to wrangler.jsonc only if
-  we later need caching beyond the hub.
-- **One-way sync only** (GitHub → life-data) for now.
+- **Sync state = the `SyncState` Durable Object** (SQLite backed, one
+  instance named `github`, declared with its migration in wrangler.jsonc). It
+  stores only the base `{repos: {nodeId: {key, lists}}}`; the bookmarks
+  themselves live in life-data. Losing it is safe: the next run is a union
+  (stars + bookmarks), which can re-star repos unstarred since the last run.
+- **Pure planner, thin I/O**: `plan.ts` decides everything from fetched
+  inputs and is where merge behavior changes and gets tested; `run.ts` applies
+  a plan and advances the base only for repos whose every write landed.
+- **Vocabulary**: every `bookmarks.tags` option except Github is a GitHub
+  list name. The Worker's hub token cannot change the catalog, so a new GitHub
+  list needs its tag option added by an agent (`life property set
+bookmarks.tags --options ...`, then `life doc` for the life-map) before it
+  syncs; until then the run flags affected bookmarks in `needs_review`.
 - **Owned infrastructure:** the `bookmarks-sync` Worker and its cron, the
   Bookmarks Sync vault, and its CI service account. The deployment token is
   minted by `scripts/provision.py` with Workers Scripts Write on the deployment
@@ -22,30 +32,35 @@ cron trigger + manual endpoint.
   vault `Bookmarks Sync`). Plain config (`LIFE_HUB_URL`) lives under `vars`
   in wrangler.jsonc, not in `.env.tpl`.
 - **GitHub access:** `GITHUB_TOKEN` is this project's independently minted
-  fine-grained PAT. It has Starring read and repository Metadata read on all
-  current and future repositories owned by the authenticated account, which
-  preserves private-star discovery without granting source-code or write
-  access. GitHub limits a fine-grained PAT to one resource owner; adding stars
-  from another owner's private repositories requires reviewing that boundary.
-  Renew through GitHub's token settings before its recorded expiration, store
-  the replacement in this project's ENV item, and compare complete paginated
-  star identities before deploying. Never use the agent's GitHub PAT at runtime.
+  fine-grained PAT. It has Starring read and write (stars and lists) and
+  repository Metadata read on all current and future repositories owned by
+  the authenticated account, which preserves private-star discovery without
+  granting source-code access. GitHub limits a fine-grained PAT to one
+  resource owner; adding stars from another owner's private repositories
+  requires reviewing that boundary. Renew through GitHub's token settings
+  before its recorded expiration, store the replacement in this project's ENV
+  item, and compare complete paginated star identities before deploying.
+  Never use the agent's GitHub PAT at runtime.
 - **life-data access:** `LIFE_HUB_TOKEN` is this project's own hub token
   (`life token create bookmarks-sync --scopes tables:read,tables:write`),
   scoped to row pulls and pushes; it holds no admin or file grants. The
-  Worker reads the `bookmarks` table's live Github-tagged rows
-  (`POST /v1/rows/pull`) and pushes one catalog-valid row per new star
-  (`POST /v1/rows/push`: fresh 32-hex id, `url`, `title`, `description` with no
-  trailing period, `tags` `["Github"]`, `updated_at` ISO-8601 UTC ms). The
-  catalog enforces the one-bookmark-per-url and Github-tag rules; a rejected
-  row is reported in the run summary, never retried blindly. Never deploy
+  Worker reads the `bookmarks` table's live GitHub-repository rows
+  (`POST /v1/rows/pull`) and the tag vocabulary (`GET /v1/catalog`), and
+  pushes catalog-valid rows grouped by column set (`POST /v1/rows/push`: new
+  bookmarks, sparse tag and `needs_review` updates, soft deletes with
+  `deleted_at = updated_at`, `updated_at` ISO-8601 UTC ms). The catalog
+  enforces the one-bookmark-per-url and Github-tag rules; a rejected row is
+  reported in the run summary and its repo is re-planned next run. Never deploy
   the agent's hub token. The hub is reached through the `LIFE_HUB` service
   binding (wrangler.jsonc `services`): a Worker cannot fetch a sibling
   workers.dev Worker over the network (Cloudflare error 1042). The binding
   only carries the same HTTP request the URL would; auth is still the token.
-- **Cron**: daily 06:00 UTC via `triggers.crons` in wrangler.jsonc; manual
-  runs via `POST /api/sync` with `Authorization: Bearer $SYNC_TOKEN` — a
-  stopgap until CF Access fronts the Worker.
+- **Cron**: hourly via `triggers.crons` in wrangler.jsonc; each run spends at
+  most `MAX_GITHUB_WRITES` GitHub writes and refuses to remove more than
+  `MAX_REMOVALS` repos (`run.ts`). Manual runs via `POST /api/sync` with
+  `Authorization: Bearer $SYNC_TOKEN` (`?dry_run=true`,
+  `?allow_removals=true`); the shared secret is a stopgap until CF Access
+  fronts the Worker.
 - **Custom Worker entry** (deviation from the template): the CF adapter
   writes its worker to the `main` of whatever wrangler config it reads and
   can't emit `scheduled()`, so the adapter reads `wrangler.build.jsonc`

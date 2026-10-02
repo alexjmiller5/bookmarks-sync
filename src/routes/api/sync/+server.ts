@@ -1,5 +1,5 @@
 import { error, json } from '@sveltejs/kit';
-import { runSync } from '$lib/sync/run';
+import { runSync, syncState } from '$lib/sync/run';
 import type { RequestHandler } from './$types';
 
 /** Constant-time-ish equality that works in both workerd and node (tests):
@@ -26,6 +26,12 @@ export const POST: RequestHandler = async ({ request, platform }) => {
 	const presented = request.headers.get('authorization')?.replace(/^Bearer /, '') ?? '';
 	if (!(await tokenMatches(presented, env.SYNC_TOKEN))) error(401, 'unauthorized');
 
-	const dryRun = new URL(request.url).searchParams.get('dry_run') === 'true';
-	return json(await runSync(env, { trigger: 'manual', dryRun }));
+	const params = new URL(request.url).searchParams;
+	return json(
+		await runSync(env, syncState(env.SYNC_STATE), {
+			trigger: 'manual',
+			dryRun: params.get('dry_run') === 'true',
+			allowRemovals: params.get('allow_removals') === 'true'
+		})
+	);
 };

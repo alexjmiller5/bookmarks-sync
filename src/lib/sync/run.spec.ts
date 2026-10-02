@@ -1,88 +1,165 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { runSync } from './run';
-import { fetchStarredRepos, type StarredRepo } from './github';
-import { fetchGithubBookmarks, createBookmark, type Bookmark } from './lifedata';
+import { runSync, MAX_GITHUB_WRITES, MAX_REMOVALS, type StateStore } from './run';
+import { fetchStarredRepos, fetchLists, lookupRepos, mutate, type Mutation } from './github';
+import { fetchBookmarks, fetchListTags, writeRows } from './lifedata';
+import type { Base, Bookmark, Repo, RowOp } from './plan';
 
-vi.mock('./github', () => ({ fetchStarredRepos: vi.fn() }));
-vi.mock('./lifedata', () => ({ fetchGithubBookmarks: vi.fn(), createBookmark: vi.fn() }));
+vi.mock('./github', () => ({
+	fetchStarredRepos: vi.fn(),
+	fetchLists: vi.fn(),
+	lookupRepos: vi.fn(),
+	mutate: vi.fn()
+}));
+vi.mock('./lifedata', () => ({
+	fetchBookmarks: vi.fn(),
+	fetchListTags: vi.fn(),
+	writeRows: vi.fn()
+}));
 
-const repo = (n: number): StarredRepo => ({
+const repo = (n: number): Repo => ({
+	id: `R${n}`,
+	url: `https://github.com/owner/repo${n}`,
 	fullName: `owner/repo${n}`,
-	description: `desc ${n}`,
-	htmlUrl: `https://github.com/owner/repo${n}`
+	description: `desc ${n}`
 });
-const bookmark = (n: number): Bookmark => ({
-	id: `row-${n}`,
-	url: `https://github.com/owner/repo${n}`
+const mark = (n: number, tags: string[] = []): Bookmark => ({
+	id: `b${n}`,
+	url: `https://github.com/owner/repo${n}`,
+	tags: ['Github', ...tags],
+	needsReview: null
 });
-
 const env = { GITHUB_TOKEN: 'gh', LIFE_HUB_URL: 'https://hub.example', LIFE_HUB_TOKEN: 'lt' };
+
+function memory(initial: Base | null) {
+	const store = { saved: undefined as Base | undefined } as StateStore & { saved?: Base };
+	store.load = async () => initial;
+	store.save = async (b) => {
+		store.saved = b;
+	};
+	return store;
+}
+
+function world(w: {
+	stars?: Repo[];
+	bookmarks?: Bookmark[];
+	lists?: { id: string; name: string; itemIds: string[] }[];
+}) {
+	vi.mocked(fetchStarredRepos).mockResolvedValue(w.stars ?? []);
+	vi.mocked(fetchBookmarks).mockResolvedValue(w.bookmarks ?? []);
+	vi.mocked(fetchLists).mockResolvedValue(w.lists ?? []);
+	vi.mocked(fetchListTags).mockResolvedValue([
+		{ name: 'Money', description: 'Ways to earn or save money.' }
+	]);
+	vi.mocked(lookupRepos).mockImplementation(async (_t, keys) =>
+		Object.fromEntries(keys.map((k) => [k, repo(Number(k.replace('owner/repo', '')))]))
+	);
+}
 
 beforeEach(() => {
 	vi.clearAllMocks();
 	vi.spyOn(console, 'log').mockImplementation(() => {});
+	vi.mocked(writeRows).mockImplementation(async (_e, ops: RowOp[]) => ({
+		ok: ops.map(() => true),
+		errors: []
+	}));
+	vi.mocked(mutate).mockImplementation(async (_t, ops: Mutation[]) => ({
+		results: ops.map((o) => (o.kind === 'createList' ? `L-${o.name}` : true)),
+		errors: []
+	}));
 });
 
 describe('runSync', () => {
-	it('creates bookmarks for new stars and counts skipped/unstarred', async () => {
-		vi.mocked(fetchStarredRepos).mockResolvedValue([repo(1), repo(2)]);
-		vi.mocked(fetchGithubBookmarks).mockResolvedValue([bookmark(2), bookmark(3)]);
-		vi.mocked(createBookmark).mockResolvedValue();
+	it('first run unions both sides and saves the agreed base', async () => {
+		world({ stars: [repo(1)], bookmarks: [mark(2, ['Money'])] });
+		const state = memory(null);
 
-		const summary = await runSync(env, { trigger: 'test' });
+		const s = await runSync(env, state, { trigger: 'test' });
 
-		expect(createBookmark).toHaveBeenCalledTimes(1);
-		expect(createBookmark).toHaveBeenCalledWith(env, repo(1));
-		expect(summary).toMatchObject({
-			trigger: 'test',
+		expect(writeRows).toHaveBeenCalledWith(env, [
+			{ op: 'create', repo: repo(1), tags: ['Github'], needsReview: null }
+		]);
+		expect(vi.mocked(mutate).mock.calls.map((c) => c[1])).toEqual([
+			[{ kind: 'createList', name: 'Money', description: 'Ways to earn or save money.' }],
+			[
+				{ kind: 'star', repoId: 'R2' },
+				{ kind: 'setLists', repoId: 'R2', listIds: ['L-Money'] }
+			]
+		]);
+		expect(state.saved).toEqual({
+			repos: {
+				R1: { key: 'owner/repo1', lists: [] },
+				R2: { key: 'owner/repo2', lists: ['Money'] }
+			}
+		});
+		expect(s).toMatchObject({
 			dryRun: false,
-			created: 1,
-			skipped: 1,
-			toCreate: ['owner/repo1'],
-			unstarred: ['https://github.com/owner/repo3'],
+			planned: { star: ['owner/repo2'], createBookmark: ['owner/repo1'], createLists: ['Money'] },
+			applied: 2,
+			deferred: [],
 			errors: []
 		});
 	});
 
-	it('dry run never writes but still reports toCreate/unstarred', async () => {
-		vi.mocked(fetchStarredRepos).mockResolvedValue([repo(1)]);
-		vi.mocked(fetchGithubBookmarks).mockResolvedValue([bookmark(9)]);
+	it('dry run plans but never writes or saves', async () => {
+		world({ stars: [repo(1)], bookmarks: [mark(2)] });
+		const state = memory(null);
 
-		const summary = await runSync(env, { trigger: 'test', dryRun: true });
+		const s = await runSync(env, state, { trigger: 'test', dryRun: true });
 
-		expect(createBookmark).not.toHaveBeenCalled();
-		expect(summary).toMatchObject({
-			dryRun: true,
-			created: 0,
-			toCreate: ['owner/repo1'],
-			unstarred: ['https://github.com/owner/repo9']
-		});
+		expect(writeRows).not.toHaveBeenCalled();
+		expect(mutate).not.toHaveBeenCalled();
+		expect(state.saved).toBeUndefined();
+		expect(s.planned).toMatchObject({ star: ['owner/repo2'], createBookmark: ['owner/repo1'] });
 	});
 
-	it('a failed create is recorded as an error and the rest still run', async () => {
-		vi.mocked(fetchStarredRepos).mockResolvedValue([repo(1), repo(2)]);
-		vi.mocked(fetchGithubBookmarks).mockResolvedValue([]);
-		vi.mocked(createBookmark)
-			.mockRejectedValueOnce(new Error('life-data /v1/rows/push 500: boom'))
-			.mockResolvedValueOnce();
+	it('refuses a mass removal unless allowed', async () => {
+		const n = MAX_REMOVALS + 1;
+		const base: Base = { repos: {} };
+		for (let i = 1; i <= n; i++) base.repos[`R${i}`] = { key: `owner/repo${i}`, lists: [] };
+		world({ stars: Array.from({ length: n }, (_, i) => repo(i + 1)) });
 
-		const summary = await runSync(env, { trigger: 'test' });
+		const state = memory(base);
+		const s = await runSync(env, state, { trigger: 'test' });
+		expect(mutate).not.toHaveBeenCalled();
+		expect(state.saved).toBeUndefined();
+		expect(s.errors[0]).toMatch(/refusing to remove 21/);
 
-		expect(createBookmark).toHaveBeenCalledTimes(2);
-		expect(summary.created).toBe(1);
-		expect(summary.errors).toEqual(['owner/repo1: life-data /v1/rows/push 500: boom']);
+		const allowed = await runSync(env, memory(base), { trigger: 'test', allowRemovals: true });
+		expect(allowed.planned.unstar).toHaveLength(n);
+		expect(mutate).toHaveBeenCalledTimes(1);
 	});
 
-	it('emits one structured log line with the summary', async () => {
-		vi.mocked(fetchStarredRepos).mockResolvedValue([]);
-		vi.mocked(fetchGithubBookmarks).mockResolvedValue([]);
+	it('spends at most the GitHub write budget and defers the rest to the next run', async () => {
+		const n = MAX_GITHUB_WRITES + 10;
+		world({ bookmarks: Array.from({ length: n }, (_, i) => mark(i + 1)) });
+		const state = memory(null);
 
-		await runSync(env, { trigger: 'cron' });
+		const s = await runSync(env, state, { trigger: 'test' });
 
-		const logged = vi.mocked(console.log).mock.calls.map((c) => c[0]);
-		const parsed = logged.map((l) => JSON.parse(l as string));
+		expect(vi.mocked(mutate).mock.calls[0][1]).toHaveLength(MAX_GITHUB_WRITES);
+		expect(s.deferred).toHaveLength(10);
+		expect(Object.keys(state.saved!.repos)).toHaveLength(MAX_GITHUB_WRITES);
+	});
+
+	it('a failed write leaves that repo out of the base so the next run retries it', async () => {
+		world({ stars: [repo(1)], bookmarks: [mark(2), mark(3)] });
+		vi.mocked(writeRows).mockResolvedValue({ ok: [false], errors: ['row: rejected'] });
+		vi.mocked(mutate).mockResolvedValue({ results: [true, null], errors: ['star R3: nope'] });
+		const state = memory(null);
+
+		const s = await runSync(env, state, { trigger: 'test' });
+
+		expect(state.saved).toEqual({ repos: { R2: { key: 'owner/repo2', lists: [] } } });
+		expect(s.errors).toEqual(['row: rejected', 'star R3: nope']);
+		expect(s.applied).toBe(1);
+	});
+
+	it('emits one structured sync_run log line', async () => {
+		world({});
+		await runSync(env, memory(null), { trigger: 'cron' });
+		const parsed = vi.mocked(console.log).mock.calls.map((c) => JSON.parse(c[0] as string));
 		expect(parsed).toContainEqual(
-			expect.objectContaining({ event: 'sync_run', trigger: 'cron', created: 0, errors: [] })
+			expect.objectContaining({ event: 'sync_run', trigger: 'cron', errors: [] })
 		);
 	});
 });
