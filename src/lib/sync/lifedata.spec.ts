@@ -16,7 +16,7 @@ afterEach(() => {
 });
 
 describe('fetchBookmarks', () => {
-	it('keeps live rows with a github repository url and parses tags', async () => {
+	it('keeps repository rows and deletion history and parses tags', async () => {
 		const fetchMock = vi.fn().mockResolvedValue(
 			jsonResponse({
 				rows: [
@@ -55,7 +55,20 @@ describe('fetchBookmarks', () => {
 		vi.stubGlobal('fetch', fetchMock);
 
 		expect(await fetchBookmarks(env)).toEqual([
-			{ id: 'a', url: 'https://github.com/o/r', tags: ['Github', 'Money'], needsReview: null }
+			{
+				id: 'a',
+				url: 'https://github.com/o/r',
+				tags: ['Github', 'Money'],
+				needsReview: null,
+				deletedAt: null
+			},
+			{
+				id: 'd',
+				url: 'https://github.com/o/gone',
+				tags: ['Github'],
+				needsReview: null,
+				deletedAt: '2026-01-01'
+			}
 		]);
 		const [url, init] = fetchMock.mock.calls[0];
 		expect(url).toBe('https://hub.example/v1/rows/pull');
@@ -117,7 +130,13 @@ describe('writeRows', () => {
 		const out = await writeRows(env, [
 			{
 				op: 'create',
-				repo: { id: 'R1', url: 'https://github.com/o/r', fullName: 'o/r', description: 'A thing.' },
+				repo: {
+					id: 'R1',
+					url: 'https://github.com/o/r',
+					fullName: 'o/r',
+					isPrivate: false,
+					description: 'A thing.'
+				},
 				tags: ['Github'],
 				needsReview: null
 			},
@@ -162,7 +181,13 @@ describe('writeRows', () => {
 		await writeRows(env, [
 			{
 				op: 'create',
-				repo: { id: 'R1', url: 'https://github.com/o/r', fullName: 'o/r', description: null },
+				repo: {
+					id: 'R1',
+					url: 'https://github.com/o/r',
+					fullName: 'o/r',
+					isPrivate: false,
+					description: null
+				},
 				tags: ['Github'],
 				needsReview: null
 			}

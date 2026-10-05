@@ -19,6 +19,7 @@ export async function fetchStarredRepos(token: string): Promise<Repo[]> {
 		if (!res.ok) throw new Error(`GitHub ${res.status}: ${await res.text()}`);
 		const page = (await res.json()) as Array<{
 			node_id: string;
+			private: boolean;
 			full_name: string;
 			description: string | null;
 			html_url: string;
@@ -26,6 +27,7 @@ export async function fetchStarredRepos(token: string): Promise<Repo[]> {
 		for (const r of page) {
 			repos.push({
 				id: r.node_id,
+				isPrivate: r.private,
 				fullName: r.full_name,
 				description: r.description,
 				url: r.html_url
@@ -119,13 +121,19 @@ export async function lookupRepos(
 			const [owner, name] = key.split('/');
 			vars[`o${i}`] = owner;
 			vars[`n${i}`] = name;
-			return `r${i}: repository(owner: $o${i}, name: $n${i}) { id url nameWithOwner description }`;
+			return `r${i}: repository(owner: $o${i}, name: $n${i}) { id url nameWithOwner description isPrivate }`;
 		});
 		const params = batch.map((_, i) => `$o${i}: String!, $n${i}: String!`).join(', ');
 		const res = await graphql<
 			Record<
 				string,
-				{ id: string; url: string; nameWithOwner: string; description: string | null } | null
+				{
+					id: string;
+					url: string;
+					nameWithOwner: string;
+					description: string | null;
+					isPrivate: boolean;
+				} | null
 			>
 		>(token, `query(${params}) { ${fields.join(' ')} }`, vars);
 		const fatal = res.errors?.filter((e) => e.type !== 'NOT_FOUND') ?? [];
@@ -133,7 +141,13 @@ export async function lookupRepos(
 		batch.forEach((key, i) => {
 			const r = res.data?.[`r${i}`];
 			out[key] = r
-				? { id: r.id, url: r.url, fullName: r.nameWithOwner, description: r.description }
+				? {
+						id: r.id,
+						url: r.url,
+						fullName: r.nameWithOwner,
+						description: r.description,
+						isPrivate: r.isPrivate
+					}
 				: null;
 		});
 	}

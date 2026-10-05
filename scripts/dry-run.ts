@@ -6,10 +6,10 @@
 // POST /api/sync?dry_run=true on the Worker.
 import { runSync } from '../src/lib/sync/run';
 
-const { GITHUB_TOKEN, LIFE_HUB_TOKEN } = Bun.env;
-if (!GITHUB_TOKEN || !LIFE_HUB_TOKEN) {
+const { GITHUB_TOKEN, GITHUB_PUBLIC_TOKEN, LIFE_HUB_TOKEN } = Bun.env;
+if (!GITHUB_TOKEN || !GITHUB_PUBLIC_TOKEN || !LIFE_HUB_TOKEN) {
 	console.error(
-		'Missing GITHUB_TOKEN / LIFE_HUB_TOKEN; run via: op run --env-file=.env.tpl -- bun scripts/dry-run.ts'
+		'Missing GITHUB_TOKEN / GITHUB_PUBLIC_TOKEN / LIFE_HUB_TOKEN; run via: op run --env-file=.env.tpl -- bun scripts/dry-run.ts'
 	);
 	process.exit(1);
 }
@@ -22,7 +22,7 @@ const wrangler = JSON.parse(
 ) as { vars: { LIFE_HUB_URL: string } };
 
 const summary = await runSync(
-	{ GITHUB_TOKEN, LIFE_HUB_TOKEN, LIFE_HUB_URL: wrangler.vars.LIFE_HUB_URL },
+	{ GITHUB_TOKEN, GITHUB_PUBLIC_TOKEN, LIFE_HUB_TOKEN, LIFE_HUB_URL: wrangler.vars.LIFE_HUB_URL },
 	{ load: async () => null, save: async () => {} },
 	{ trigger: 'script', dryRun: true, allowRemovals: true }
 );

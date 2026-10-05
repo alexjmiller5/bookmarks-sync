@@ -9,6 +9,7 @@ export const MAX_REMOVALS = 20;
 
 export interface SyncEnv extends HubEnv {
 	GITHUB_TOKEN: string;
+	GITHUB_PUBLIC_TOKEN: string;
 }
 
 /** Where the base (last agreed state) lives: a Durable Object in the Worker. */
@@ -45,6 +46,8 @@ export async function runSync(
 	state: StateStore,
 	opts: { trigger: string; dryRun?: boolean; allowRemovals?: boolean }
 ): Promise<SyncSummary> {
+	if (!env.GITHUB_TOKEN || !env.GITHUB_PUBLIC_TOKEN)
+		throw new Error('Both GITHUB_TOKEN and GITHUB_PUBLIC_TOKEN are required');
 	const dryRun = opts.dryRun ?? false;
 	const base = (await state.load()) ?? { repos: {} };
 	const [stars, lists, bookmarks, tags] = await Promise.all([
@@ -65,15 +68,24 @@ export async function runSync(
 		vocab: tags.map((t) => t.name)
 	});
 
+	const repoInfo = new Map(
+		[...Object.values(lookups).filter((r) => r !== null), ...stars].map((r) => [r.id, r])
+	);
+	const privateRepo = (p: RepoPlan) => repoInfo.get(p.id)?.isPrivate !== false;
+	const writable = (p: RepoPlan) =>
+		p.github.filter((o) => o.kind !== 'setLists' || !privateRepo(p));
+	const blocked = plan.repos.filter((p) => privateRepo(p) && has(p, 'setLists'));
 	const listIds = new Map(lists.map((l) => [l.name, l.id]));
 	const wanted = (p: RepoPlan) =>
-		p.github.flatMap((o) => (o.kind === 'setLists' ? o.lists : [])).filter((n) => !listIds.has(n));
+		writable(p)
+			.flatMap((o) => (o.kind === 'setLists' ? o.lists : []))
+			.filter((n) => !listIds.has(n));
 
 	const summary: SyncSummary = {
 		trigger: opts.trigger,
 		dryRun,
 		starred: stars.length,
-		bookmarked: bookmarks.length,
+		bookmarked: bookmarks.filter((b) => !b.deletedAt).length,
 		planned: {
 			star: names(plan.repos.filter((p) => has(p, 'star'))),
 			unstar: names(plan.repos.filter((p) => has(p, 'unstar'))),
@@ -87,7 +99,10 @@ export async function runSync(
 		},
 		applied: 0,
 		deferred: [],
-		errors: []
+		errors: blocked.map(
+			(p) =>
+				`${p.fullName}: private repository list writes are unsupported by the configured tokens`
+		)
 	};
 	const finish = () => {
 		console.log(JSON.stringify({ event: 'sync_run', at: new Date().toISOString(), ...summary }));
@@ -113,13 +128,15 @@ export async function runSync(
 		at += p.rows.length;
 	}
 
+	for (const p of blocked) ok.set(p.id, false);
+
 	// GitHub writes, within the budget; new lists count against it too
 	let budget = MAX_GITHUB_WRITES;
 	const chosen: RepoPlan[] = [];
 	const newLists = new Set<string>();
-	for (const p of plan.repos.filter((p) => p.github.length)) {
+	for (const p of plan.repos.filter((p) => writable(p).length)) {
 		const need = wanted(p).filter((n) => !newLists.has(n));
-		const cost = p.github.length + need.length;
+		const cost = writable(p).length + need.length;
 		if (cost > budget) {
 			summary.deferred.push(p.fullName);
 			ok.set(p.id, false);
@@ -133,7 +150,7 @@ export async function runSync(
 		const describe = new Map(tags.map((t) => [t.name, t.description]));
 		const created = [...newLists];
 		const res = await mutate(
-			env.GITHUB_TOKEN,
+			env.GITHUB_PUBLIC_TOKEN,
 			created.map((name) => ({ kind: 'createList', name, description: describe.get(name) ?? '' }))
 		);
 		summary.errors.push(...res.errors);
@@ -141,8 +158,9 @@ export async function runSync(
 	}
 	const ops: Mutation[] = [];
 	const owners: string[] = [];
+	const tokens: string[] = [];
 	for (const p of chosen) {
-		for (const o of p.github) {
+		for (const o of writable(p)) {
 			if (o.kind !== 'setLists') ops.push({ kind: o.kind, repoId: p.id });
 			else if (o.lists.every((n) => listIds.has(n)))
 				ops.push({ kind: 'setLists', repoId: p.id, listIds: o.lists.map((n) => listIds.get(n)!) });
@@ -151,12 +169,17 @@ export async function runSync(
 				continue;
 			}
 			owners.push(p.id);
+			tokens.push(privateRepo(p) ? env.GITHUB_TOKEN : env.GITHUB_PUBLIC_TOKEN);
 		}
 	}
-	if (ops.length) {
-		const res = await mutate(env.GITHUB_TOKEN, ops);
+	for (const token of new Set(tokens)) {
+		const indices = ops.map((_, i) => i).filter((i) => tokens[i] === token);
+		const res = await mutate(
+			token,
+			indices.map((i) => ops[i])
+		);
 		summary.errors.push(...res.errors);
-		res.results.forEach((r, i) => r === null && ok.set(owners[i], false));
+		res.results.forEach((r, i) => r === null && ok.set(owners[indices[i]], false));
 	}
 
 	// Advance the base only for repos whose every op landed; the rest re-plan next run.

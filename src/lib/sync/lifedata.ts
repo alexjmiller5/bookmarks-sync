@@ -25,7 +25,7 @@ async function hub<T>(env: HubEnv, path: string, body?: unknown): Promise<T> {
 	return (await res.json()) as T;
 }
 
-/** Live `bookmarks` rows whose url is a GitHub repository. */
+/** GitHub repository bookmarks, including tombstones so intentional deletions survive first sync. */
 export async function fetchBookmarks(env: HubEnv): Promise<Bookmark[]> {
 	const data = await hub<{
 		rows: Array<{
@@ -41,12 +41,13 @@ export async function fetchBookmarks(env: HubEnv): Promise<Bookmark[]> {
 		since: ''
 	});
 	return data.rows
-		.filter((r) => !r.deleted_at && r.url && repoKey(r.url))
+		.filter((r) => r.url && repoKey(r.url))
 		.map((r) => ({
 			id: r.id,
 			url: r.url as string,
 			tags: JSON.parse(r.tags ?? '[]') as string[],
-			needsReview: r.needs_review
+			needsReview: r.needs_review,
+			deletedAt: r.deleted_at
 		}));
 }
 

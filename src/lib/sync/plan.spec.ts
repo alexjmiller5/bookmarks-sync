@@ -15,7 +15,8 @@ const repo = (n: number): Repo => ({
 	id: `R${n}`,
 	url: `https://github.com/owner/repo${n}`,
 	fullName: `owner/repo${n}`,
-	description: `desc ${n}`
+	description: `desc ${n}`,
+	isPrivate: false
 });
 const mark = (n: number, tags: string[] = [], extra: Partial<Bookmark> = {}): Bookmark => ({
 	id: `b${n}`,
@@ -240,5 +241,21 @@ describe('planSync lists and tags', () => {
 				needsReview: `${REVIEW_UNKNOWN_LISTS}Mystery`
 			}
 		]);
+	});
+});
+
+describe('retained deletions', () => {
+	it('un stars an intentionally deleted bookmark even before a successful baseline', () => {
+		const p = plan({ stars: [repo(1)], bookmarks: [mark(1, [], { deletedAt: '2026-01-01' })] });
+		expect(only(p, 'R1')).toMatchObject({ github: [{ kind: 'unstar' }], rows: [], target: null });
+		expect(keysToLookup({ repos: {} }, [], [mark(1, [], { deletedAt: '2026-01-01' })])).toEqual([]);
+	});
+	it('a live replacement bookmark takes precedence over retained deleted history', () => {
+		const p = plan({
+			stars: [repo(1)],
+			bookmarks: [mark(1, [], { deletedAt: '2026-01-01' }), { ...mark(1), id: 'new' }]
+		});
+		expect(only(p, 'R1').github).toEqual([]);
+		expect(only(p, 'R1').target).not.toBeNull();
 	});
 });

@@ -3,6 +3,7 @@ import { fetchStarredRepos, fetchLists, lookupRepos, mutate } from './github';
 
 const ghRepo = (n: number) => ({
 	node_id: `R${n}`,
+	private: n % 2 === 1,
 	full_name: `owner/repo${n}`,
 	description: n % 2 ? `desc ${n}` : null,
 	html_url: `https://github.com/owner/repo${n}`
@@ -26,6 +27,7 @@ describe('fetchStarredRepos', () => {
 		expect(await fetchStarredRepos('tok')).toEqual([
 			{
 				id: 'R1',
+				isPrivate: true,
 				fullName: 'owner/repo1',
 				description: 'desc 1',
 				url: 'https://github.com/owner/repo1'
@@ -115,6 +117,7 @@ describe('lookupRepos', () => {
 				data: {
 					r0: {
 						id: 'R1',
+						isPrivate: true,
 						url: 'https://github.com/owner/repo1',
 						nameWithOwner: 'owner/repo1',
 						description: 'd'
@@ -129,6 +132,7 @@ describe('lookupRepos', () => {
 		expect(await lookupRepos('tok', ['owner/repo1', 'gone/away'])).toEqual({
 			'owner/repo1': {
 				id: 'R1',
+				isPrivate: true,
 				url: 'https://github.com/owner/repo1',
 				fullName: 'owner/repo1',
 				description: 'd'

@@ -26,7 +26,12 @@ Architecture notes:
   - add a repo to a list or tag a GitHub bookmark: the other side follows,
     name by name, so changes on both sides in one run both survive.
 - **First run is a union.** With no base, every bookmark gets starred and
-  every star gets a bookmark.
+  every star gets a bookmark, except repos with a retained bookmark deletion.
+  A deletion wins until a live bookmark for that URL is restored or created.
+- **Two GitHub tokens.** Complete reads and private star/unstar writes use
+  the fine-grained token. Public star/unstar and list writes use the classic
+  token. Private list writes are reported as unsupported without API retries;
+  affected repos stay unsettled while other repos sync normally.
 - **Tags are lists.** Every `bookmarks.tags` option except Github mirrors the
   GitHub list of the same name. A missing list is created (public, with the
   tag's catalog description). A GitHub list with no matching tag option is
@@ -60,7 +65,8 @@ plan. Each file has vitest specs alongside. Every run emits one structured
 
   ```bash
   curl -X POST "https://bookmarks-sync.<subdomain>.workers.dev/api/sync?dry_run=true" \
-    -H "Authorization: Bearer $SYNC_TOKEN"
+    -H "Authorization: Bearer $SYNC_TOKEN" \
+    -H "Content-Type: application/json" -d '{}'
   ```
 
   The shared-secret header is a stopgap until Cloudflare Access fronts this
@@ -106,9 +112,15 @@ runtime secrets on pushes to main. The only GitHub secret is the project's
 ## Setup
 
 1. Create a dedicated GitHub fine-grained personal access token with the
-   account permission **Starring: Read and write** (stars and lists) and
+   account permission **Starring: Read and write** and
    **Metadata: Read** on all repositories, so private stars resolve. No
-   repository contents or administration permissions are needed.
+   repository contents or administration permissions are needed. Store it as
+   `GITHUB_TOKEN`. Also mint a dedicated classic PAT with exactly
+   `public_repo,user`, stored as `GITHUB_PUBLIC_TOKEN`, for public stars and
+   list writes. Do not grant the classic `repo` scope: it includes private
+   source-code access. Fine-grained PATs cannot perform these public/list
+   writes with the tested permissions; see
+   [GitHub token limitations](https://docs.github.com/en/authentication/keeping-your-account-and-data-secure/managing-your-personal-access-tokens).
 2. Mint a dedicated life-data hub token with `tables:read,tables:write`
    (`life token create bookmarks-sync --scopes tables:read,tables:write`).
 3. Set the hub URL in `wrangler.jsonc` under `vars.LIFE_HUB_URL`.

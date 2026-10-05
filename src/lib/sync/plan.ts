@@ -14,6 +14,7 @@ export interface Repo {
 	url: string;
 	fullName: string;
 	description: string | null;
+	isPrivate: boolean;
 }
 
 export interface Bookmark {
@@ -21,6 +22,7 @@ export interface Bookmark {
 	url: string;
 	tags: string[];
 	needsReview: string | null;
+	deletedAt?: string | null;
 }
 
 export interface BaseEntry {
@@ -98,7 +100,7 @@ export function keysToLookup(base: Base, stars: Repo[], bookmarks: Bookmark[]): 
 	const keys = new Set<string>();
 	for (const b of bookmarks) {
 		const key = repoKey(b.url);
-		if (key && !known.has(key) && b.needsReview !== REVIEW_NOT_FOUND) keys.add(key);
+		if (!b.deletedAt && key && !known.has(key) && b.needsReview !== REVIEW_NOT_FOUND) keys.add(key);
 	}
 	return [...keys];
 }
@@ -119,11 +121,12 @@ export function planSync(inp: PlanInput): Plan {
 	for (const r of Object.values(inp.lookups)) if (r) info.set(r.id, r);
 	for (const r of inp.stars) info.set(r.id, r);
 
+	const deletedKeys = new Set(inp.bookmarks.filter((b) => b.deletedAt).map((b) => repoKey(b.url)));
 	const marks = new Map<string, Array<Bookmark & { key: string }>>();
 	const reviews: RowOp[] = [];
 	for (const b of inp.bookmarks) {
 		const key = repoKey(b.url);
-		if (!key) continue;
+		if (!key || b.deletedAt) continue;
 		const id = idByKey.get(key);
 		if (id) marks.set(id, [...(marks.get(id) ?? []), { ...b, key }]);
 		else if (inp.lookups[key] === null && b.needsReview !== REVIEW_NOT_FOUND)
@@ -148,7 +151,7 @@ export function planSync(inp: PlanInput): Plan {
 			continue;
 		}
 		if (star && !group.length) {
-			if (base) out.github.push({ kind: 'unstar' });
+			if (base || deletedKeys.has(repoKey(star.url))) out.github.push({ kind: 'unstar' });
 			else {
 				out.rows.push({
 					op: 'create',

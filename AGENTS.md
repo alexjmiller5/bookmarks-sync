@@ -13,7 +13,9 @@ status page; sync runs on a CF cron trigger + manual endpoint.
   instance named `github`, declared with its migration in wrangler.jsonc). It
   stores only the base `{repos: {nodeId: {key, lists}}}`; the bookmarks
   themselves live in life-data. Losing it is safe: the next run is a union
-  (stars + bookmarks), which can re-star repos unstarred since the last run.
+  (stars + bookmarks), which can re-star repos unstarred since the last run. Retained bookmark
+  tombstones still prevent recreating intentionally deleted bookmarks; a
+  live replacement row for the same URL takes precedence.
 - **Pure planner, thin I/O**: `plan.ts` decides everything from fetched
   inputs and is where merge behavior changes and gets tested; `run.ts` applies
   a plan and advances the base only for repos whose every write landed.
@@ -28,23 +30,24 @@ bookmarks.tags --options ...`, then `life doc` for the life-map) before it
   account. Cloudflare enforces that permission at account scope, so separate
   tokens provide independent rotation but do not prevent access to sibling
   Workers. CI has no DNS, R2, D1, or Access administration permissions.
-- Secrets: `GITHUB_TOKEN`, `LIFE_HUB_TOKEN`, `SYNC_TOKEN` (see `.env.tpl`;
+- Secrets: `GITHUB_TOKEN`, `GITHUB_PUBLIC_TOKEN`, `LIFE_HUB_TOKEN`, `SYNC_TOKEN` (see `.env.tpl`;
   vault `Bookmarks Sync`). Plain config (`LIFE_HUB_URL`) lives under `vars`
   in wrangler.jsonc, not in `.env.tpl`.
-- **GitHub access:** `GITHUB_TOKEN` is this project's independently minted
-  fine-grained PAT. It has Starring read and write (stars and lists) and
-  repository Metadata read on all current and future repositories owned by
-  the authenticated account, which preserves private-star discovery without
-  granting source-code access. GitHub limits a fine-grained PAT to one
-  resource owner; adding stars from another owner's private repositories
-  requires reviewing that boundary. Renew through GitHub's token settings
-  before its recorded expiration, store the replacement in this project's ENV
-  item, and compare complete paginated star identities before deploying.
-  Never use the agent's GitHub PAT at runtime.
+- **GitHub access:** both PATs are independently minted for this project.
+  `GITHUB_TOKEN` is fine-grained: Starring read/write and Metadata read on
+  owned repositories, for complete reads (including private stars) and
+  private star/unstar writes. `GITHUB_PUBLIC_TOKEN` is classic with exactly
+  `public_repo,user`, for public stars and all supported list writes. Never
+  substitute the public-only reader for complete reads or grant classic
+  `repo` scope implicitly. Private list writes are reported as unsupported,
+  excluded from the write budget, and keep that repo's base unsettled.
+  Preserve the common 50-write budget across both credentials. Renew each
+  before its recorded expiration, store it in this project's ENV item, and
+  verify complete reads and routed writes. Never deploy an agent credential.
 - **life-data access:** `LIFE_HUB_TOKEN` is this project's own hub token
   (`life token create bookmarks-sync --scopes tables:read,tables:write`),
   scoped to row pulls and pushes; it holds no admin or file grants. The
-  Worker reads the `bookmarks` table's live GitHub-repository rows
+  Worker reads the `bookmarks` table's GitHub-repository rows including tombstones
   (`POST /v1/rows/pull`) and the tag vocabulary (`GET /v1/catalog`), and
   pushes catalog-valid rows grouped by column set (`POST /v1/rows/push`: new
   bookmarks, sparse tag and `needs_review` updates, soft deletes with
