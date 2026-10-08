@@ -44,11 +44,13 @@ bookmarks.tags --options ...`, then `life doc` for the life-map) before it
   Preserve the common 50-write budget across both credentials. Renew each
   before its recorded expiration, store it in this project's ENV item, and
   verify complete reads and routed writes. Never deploy an agent credential.
-- **life-data access:** `LIFE_HUB_TOKEN` is this project's own hub token
-  (`life token create bookmarks-sync --scopes tables:read,tables:write`),
-  scoped to row pulls and pushes; it holds no admin or file grants. The
-  Worker reads the `bookmarks` table's GitHub-repository rows including tombstones
-  (`POST /v1/rows/pull`) and the tag vocabulary (`GET /v1/catalog`), and
+- **life-data access:** `LIFE_HUB_TOKEN` is this project's own hub token,
+  enrolled with a Life Data profile granting exactly
+  `tables:read:bookmarks` and `tables:write:bookmarks` (no other table, no
+  file, admin or catalog-write grant). The Worker reads the `bookmarks`
+  table's GitHub-repository rows including tombstones (`POST /v1/rows/pull`,
+  200-row pages following `next_cursor`) and the tag vocabulary
+  (`GET /v1/catalog/options?table=bookmarks&column=tags`), and
   pushes catalog-valid rows grouped by column set (`POST /v1/rows/push`: new
   bookmarks, sparse tag and `needs_review` updates, soft deletes with
   `deleted_at = updated_at`, `updated_at` ISO-8601 UTC ms). The catalog

@@ -121,8 +121,16 @@ runtime secrets on pushes to main. The only GitHub secret is the project's
    source-code access. Fine-grained PATs cannot perform these public/list
    writes with the tested permissions; see
    [GitHub token limitations](https://docs.github.com/en/authentication/keeping-your-account-and-data-secure/managing-your-personal-access-tokens).
-2. Mint a dedicated life-data hub token with `tables:read,tables:write`
-   (`life token create bookmarks-sync --scopes tables:read,tables:write`).
+2. Have the Life Data operator add an enrollment profile granting
+   `tables:read:bookmarks` and `tables:write:bookmarks`, then enroll this
+   server with it in two steps and store the printed token as
+   `LIFE_HUB_TOKEN`:
+
+   ```bash
+   life login --profile <id> --name "Bookmarks Sync server" --start pending.json
+   life login --claim pending.json --wait   # after the owner approves the URL
+   ```
+
 3. Set the hub URL in `wrangler.jsonc` under `vars.LIFE_HUB_URL`.
 4. Bootstrap from a desktop-authenticated 1Password shell:
 

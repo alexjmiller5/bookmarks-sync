@@ -61,11 +61,9 @@ it('preserves deleted rows and private discovery while writing public stars thro
 		const body = init?.body ? JSON.parse(String(init.body)) : null;
 		if (path.startsWith('https://hub.example')) {
 			expect(auth).toBe('Bearer life');
-			if (path.endsWith('/v1/rows/pull')) return json({ rows });
-			if (path.endsWith('/v1/catalog'))
-				return json({
-					properties: [{ id: 'bookmarks.tags', options: '[{"v":"Github"},{"v":"Learning"}]' }]
-				});
+			if (path.endsWith('/v1/rows/pull')) return json({ rows, next_cursor: null });
+			if (path.endsWith('/v1/catalog/options?table=bookmarks&column=tags'))
+				return json({ options: [{ v: 'Github' }, { v: 'Learning' }] });
 			throw new Error('No source row should need a write in this scenario');
 		}
 		if (path.includes('/user/starred')) {

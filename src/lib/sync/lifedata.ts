@@ -25,22 +25,34 @@ async function hub<T>(env: HubEnv, path: string, body?: unknown): Promise<T> {
 	return (await res.json()) as T;
 }
 
+type BookmarkRow = {
+	id: string;
+	url: string | null;
+	tags: string | null;
+	needs_review: string | null;
+	deleted_at: string | null;
+};
+
 /** GitHub repository bookmarks, including tombstones so intentional deletions survive first sync. */
 export async function fetchBookmarks(env: HubEnv): Promise<Bookmark[]> {
-	const data = await hub<{
-		rows: Array<{
-			id: string;
-			url: string | null;
-			tags: string | null;
-			needs_review: string | null;
-			deleted_at: string | null;
-		}>;
-	}>(env, '/v1/rows/pull', {
-		table: 'bookmarks',
-		columns: ['id', 'url', 'tags', 'needs_review', 'deleted_at'],
-		since: ''
-	});
-	return data.rows
+	// A table-scoped token gets at most 200 rows per pull: walk every page.
+	const rows: BookmarkRow[] = [];
+	let after: string | undefined;
+	do {
+		const page = await hub<{ rows: BookmarkRow[]; next_cursor?: string | null }>(
+			env,
+			'/v1/rows/pull',
+			{
+				table: 'bookmarks',
+				columns: ['id', 'url', 'tags', 'needs_review', 'deleted_at'],
+				limit: 200,
+				...(after ? { after } : {})
+			}
+		);
+		rows.push(...page.rows);
+		after = page.next_cursor ?? undefined;
+	} while (after);
+	return rows
 		.filter((r) => r.url && repoKey(r.url))
 		.map((r) => ({
 			id: r.id,
@@ -55,13 +67,12 @@ export async function fetchBookmarks(env: HubEnv): Promise<Bookmark[]> {
 export async function fetchListTags(
 	env: HubEnv
 ): Promise<Array<{ name: string; description: string }>> {
-	const catalog = await hub<{ properties: Array<{ id: string; options: string | null }> }>(
+	const { options } = await hub<{ options?: Array<{ v: string; d?: string }> }>(
 		env,
-		'/v1/catalog'
+		'/v1/catalog/options?table=bookmarks&column=tags'
 	);
-	const prop = catalog.properties.find((p) => p.id === 'bookmarks.tags');
-	if (!prop?.options) throw new Error('life-data catalog has no bookmarks.tags options');
-	return (JSON.parse(prop.options) as Array<{ v: string; d?: string }>)
+	if (!options?.length) throw new Error('life-data catalog has no bookmarks.tags options');
+	return options
 		.filter((o) => o.v !== 'Github')
 		.map((o) => ({ name: o.v, description: o.d ?? '' }));
 }
@@ -106,7 +117,7 @@ export async function writeRows(env: HubEnv, ops: RowOp[]) {
 	});
 	for (const [cols, items] of groups) {
 		try {
-			const out = await hub<{ rejected?: Array<{ row_id?: string; message?: string }> }>(
+			const out = await hub<{ rejected?: Array<{ id?: string; message?: string }> }>(
 				env,
 				'/v1/rows/push',
 				{
@@ -115,7 +126,7 @@ export async function writeRows(env: HubEnv, ops: RowOp[]) {
 					rows: items.map((x) => x.row)
 				}
 			);
-			const rejected = new Map((out.rejected ?? []).map((r) => [r.row_id, r.message]));
+			const rejected = new Map((out.rejected ?? []).map((r) => [r.id, r.message]));
 			for (const { i, row } of items) {
 				if (rejected.has(row.id as string))
 					errors.push(`${row.id}: ${rejected.get(row.id as string)}`);

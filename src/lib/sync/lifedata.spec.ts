@@ -76,8 +76,28 @@ describe('fetchBookmarks', () => {
 		expect(body(fetchMock)).toEqual({
 			table: 'bookmarks',
 			columns: ['id', 'url', 'tags', 'needs_review', 'deleted_at'],
-			since: ''
+			limit: 200
 		});
+	});
+
+	it('follows next_cursor until the last page, since a table-scoped pull returns 200 rows at most', async () => {
+		const row = (id: string) => ({
+			id,
+			url: `https://github.com/o/${id}`,
+			tags: '["Github"]',
+			needs_review: null,
+			deleted_at: null
+		});
+		const fetchMock = vi
+			.fn()
+			.mockResolvedValueOnce(jsonResponse({ rows: [row('a')], next_cursor: 'a' }))
+			.mockResolvedValueOnce(jsonResponse({ rows: [row('b')], next_cursor: null }));
+		vi.stubGlobal('fetch', fetchMock);
+
+		expect((await fetchBookmarks(env)).map((b) => b.id)).toEqual(['a', 'b']);
+		expect(fetchMock).toHaveBeenCalledTimes(2);
+		expect(body(fetchMock, 0).after).toBeUndefined();
+		expect(body(fetchMock, 1)).toMatchObject({ limit: 200, after: 'a' });
 	});
 
 	it('goes through the LIFE_HUB service binding when one is bound', async () => {
@@ -96,25 +116,31 @@ describe('fetchBookmarks', () => {
 });
 
 describe('fetchListTags', () => {
-	it('reads the bookmarks.tags options from the catalog, minus Github', async () => {
+	it('reads the bookmarks.tags options, minus Github, through the table-scoped options route', async () => {
 		const fetchMock = vi.fn().mockResolvedValue(
 			jsonResponse({
-				properties: [
-					{ id: 'books.tags', options: '[{"v":"Favorite","d":"x"}]' },
-					{
-						id: 'bookmarks.tags',
-						options: '[{"v":"Github","d":"g"},{"v":"Money","d":"Ways to earn or save money."}]'
-					}
+				options: [
+					{ v: 'Github', d: 'g' },
+					{ v: 'Money', d: 'Ways to earn or save money.' },
+					{ v: 'Undescribed' }
 				]
 			})
 		);
 		vi.stubGlobal('fetch', fetchMock);
 
 		expect(await fetchListTags(env)).toEqual([
-			{ name: 'Money', description: 'Ways to earn or save money.' }
+			{ name: 'Money', description: 'Ways to earn or save money.' },
+			{ name: 'Undescribed', description: '' }
 		]);
-		expect(fetchMock.mock.calls[0][0]).toBe('https://hub.example/v1/catalog');
+		expect(fetchMock.mock.calls[0][0]).toBe(
+			'https://hub.example/v1/catalog/options?table=bookmarks&column=tags'
+		);
 		expect(fetchMock.mock.calls[0][1].method).toBe('GET');
+	});
+
+	it('fails loudly when the vocabulary is empty', async () => {
+		vi.stubGlobal('fetch', vi.fn().mockResolvedValue(jsonResponse({ options: [] })));
+		await expect(fetchListTags(env)).rejects.toThrow('bookmarks.tags');
 	});
 });
 
@@ -123,7 +149,7 @@ describe('writeRows', () => {
 		const fetchMock = vi
 			.fn()
 			.mockResolvedValueOnce(jsonResponse({ rejected: [] }))
-			.mockResolvedValueOnce(jsonResponse({ rejected: [{ row_id: 'b2', message: 'bad tag' }] }))
+			.mockResolvedValueOnce(jsonResponse({ rejected: [{ id: 'b2', message: 'bad tag' }] }))
 			.mockResolvedValueOnce(jsonResponse({ rejected: [] }));
 		vi.stubGlobal('fetch', fetchMock);
 
