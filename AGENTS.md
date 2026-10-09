@@ -22,7 +22,7 @@ status page; sync runs on a CF cron trigger + manual endpoint.
 - **Vocabulary**: every `bookmarks.tags` option except Github is a GitHub
   list name. The Worker's hub token cannot change the catalog, so a new GitHub
   list needs its tag option added by an agent (`soma property set
-bookmarks.tags --options ...`, then `soma doc` for the life-map) before it
+bookmarks.tags --options ...`, then `soma doc` for the soma-map) before it
   syncs; until then the run flags affected bookmarks in `needs_review`.
 - **Owned infrastructure:** the `bookmarks-sync` Worker and its cron, the
   Bookmarks Sync vault, and its CI service account. The deployment token is
