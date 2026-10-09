@@ -5,5 +5,5 @@
 # Push to CF:     just sync-secrets
 GITHUB_TOKEN=op://Bookmarks Sync/Bookmarks Sync ENV/GITHUB_TOKEN
 GITHUB_PUBLIC_TOKEN=op://Bookmarks Sync/Bookmarks Sync ENV/GITHUB_PUBLIC_TOKEN
-SOMA_HUB_TOKEN=op://Bookmarks Sync/Bookmarks Sync ENV/LIFE_HUB_TOKEN
+SOMA_HUB_TOKEN=op://Bookmarks Sync/Bookmarks Sync ENV/SOMA_HUB_TOKEN
 SYNC_TOKEN=op://Bookmarks Sync/Bookmarks Sync ENV/SYNC_TOKEN
