@@ -1,27 +1,27 @@
 import { repoKey, type Bookmark, type RowOp } from './plan';
 
 export interface HubEnv {
-	LIFE_HUB_URL: string;
-	LIFE_HUB_TOKEN: string;
+	SOMA_HUB_URL: string;
+	SOMA_HUB_TOKEN: string;
 	/** Service binding to the hub Worker; a plain fetch is used when absent (tests, local dev). */
-	LIFE_HUB?: { fetch: typeof fetch };
+	SOMA_HUB?: { fetch: typeof fetch };
 }
 
 async function hub<T>(env: HubEnv, path: string, body?: unknown): Promise<T> {
 	// Call through the binding object: a detached `fetch` throws Illegal invocation.
-	const res = await (env.LIFE_HUB ?? globalThis).fetch(
-		`${env.LIFE_HUB_URL.replace(/\/$/, '')}${path}`,
+	const res = await (env.SOMA_HUB ?? globalThis).fetch(
+		`${env.SOMA_HUB_URL.replace(/\/$/, '')}${path}`,
 		{
 			method: body === undefined ? 'GET' : 'POST',
 			headers: {
-				Authorization: `Bearer ${env.LIFE_HUB_TOKEN}`,
+				Authorization: `Bearer ${env.SOMA_HUB_TOKEN}`,
 				'Content-Type': 'application/json',
 				'User-Agent': 'bookmarks-sync'
 			},
 			body: body === undefined ? undefined : JSON.stringify(body)
 		}
 	);
-	if (!res.ok) throw new Error(`life-data ${path} ${res.status}: ${await res.text()}`);
+	if (!res.ok) throw new Error(`soma ${path} ${res.status}: ${await res.text()}`);
 	return (await res.json()) as T;
 }
 
@@ -71,7 +71,7 @@ export async function fetchListTags(
 		env,
 		'/v1/catalog/options?table=bookmarks&column=tags'
 	);
-	if (!options?.length) throw new Error('life-data catalog has no bookmarks.tags options');
+	if (!options?.length) throw new Error('soma catalog has no bookmarks.tags options');
 	return options
 		.filter((o) => o.v !== 'Github')
 		.map((o) => ({ name: o.v, description: o.d ?? '' }));

@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { runSync, MAX_GITHUB_WRITES, MAX_REMOVALS, type StateStore } from './run';
 import { fetchStarredRepos, fetchLists, lookupRepos, mutate, type Mutation } from './github';
-import { fetchBookmarks, fetchListTags, writeRows } from './lifedata';
+import { fetchBookmarks, fetchListTags, writeRows } from './somadata';
 import type { Base, Bookmark, Repo, RowOp } from './plan';
 
 vi.mock('./github', () => ({
@@ -10,7 +10,7 @@ vi.mock('./github', () => ({
 	lookupRepos: vi.fn(),
 	mutate: vi.fn()
 }));
-vi.mock('./lifedata', () => ({
+vi.mock('./somadata', () => ({
 	fetchBookmarks: vi.fn(),
 	fetchListTags: vi.fn(),
 	writeRows: vi.fn()
@@ -32,8 +32,8 @@ const mark = (n: number, tags: string[] = []): Bookmark => ({
 const env = {
 	GITHUB_TOKEN: 'gh',
 	GITHUB_PUBLIC_TOKEN: 'public',
-	LIFE_HUB_URL: 'https://hub.example',
-	LIFE_HUB_TOKEN: 'lt'
+	SOMA_HUB_URL: 'https://hub.example',
+	SOMA_HUB_TOKEN: 'lt'
 };
 
 function memory(initial: Base | null) {

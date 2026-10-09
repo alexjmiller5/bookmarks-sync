@@ -1,6 +1,6 @@
 # AGENTS.md
 
-bookmarks-sync: two-way sync between GitHub and the life-data `bookmarks`
+bookmarks-sync: two-way sync between GitHub and the soma `bookmarks`
 table. Stars are GitHub-tagged bookmarks and GitHub list membership mirrors the
 other tags, via a three-way merge against the last agreed state (semantics in
 README "Sync semantics"). Cloudflare Worker (cf-site template) with a minimal
@@ -12,7 +12,7 @@ status page; sync runs on a CF cron trigger + manual endpoint.
 - **Sync state = the `SyncState` Durable Object** (SQLite backed, one
   instance named `github`, declared with its migration in wrangler.jsonc). It
   stores only the base `{repos: {nodeId: {key, lists}}}`; the bookmarks
-  themselves live in life-data. Losing it is safe: the next run is a union
+  themselves live in soma. Losing it is safe: the next run is a union
   (stars + bookmarks), which can re-star repos unstarred since the last run. Retained bookmark
   tombstones still prevent recreating intentionally deleted bookmarks; a
   live replacement row for the same URL takes precedence.
@@ -21,8 +21,8 @@ status page; sync runs on a CF cron trigger + manual endpoint.
   a plan and advances the base only for repos whose every write landed.
 - **Vocabulary**: every `bookmarks.tags` option except Github is a GitHub
   list name. The Worker's hub token cannot change the catalog, so a new GitHub
-  list needs its tag option added by an agent (`life property set
-bookmarks.tags --options ...`, then `life doc` for the life-map) before it
+  list needs its tag option added by an agent (`soma property set
+bookmarks.tags --options ...`, then `soma doc` for the life-map) before it
   syncs; until then the run flags affected bookmarks in `needs_review`.
 - **Owned infrastructure:** the `bookmarks-sync` Worker and its cron, the
   Bookmarks Sync vault, and its CI service account. The deployment token is
@@ -30,8 +30,8 @@ bookmarks.tags --options ...`, then `life doc` for the life-map) before it
   account. Cloudflare enforces that permission at account scope, so separate
   tokens provide independent rotation but do not prevent access to sibling
   Workers. CI has no DNS, R2, D1, or Access administration permissions.
-- Secrets: `GITHUB_TOKEN`, `GITHUB_PUBLIC_TOKEN`, `LIFE_HUB_TOKEN`, `SYNC_TOKEN` (see `.env.tpl`;
-  vault `Bookmarks Sync`). Plain config (`LIFE_HUB_URL`) lives under `vars`
+- Secrets: `GITHUB_TOKEN`, `GITHUB_PUBLIC_TOKEN`, `SOMA_HUB_TOKEN`, `SYNC_TOKEN` (see `.env.tpl`;
+  vault `Bookmarks Sync`). Plain config (`SOMA_HUB_URL`) lives under `vars`
   in wrangler.jsonc, not in `.env.tpl`.
 - **GitHub access:** both PATs are independently minted for this project.
   `GITHUB_TOKEN` is fine-grained: Starring read/write and Metadata read on
@@ -44,8 +44,8 @@ bookmarks.tags --options ...`, then `life doc` for the life-map) before it
   Preserve the common 50-write budget across both credentials. Renew each
   before its recorded expiration, store it in this project's ENV item, and
   verify complete reads and routed writes. Never deploy an agent credential.
-- **life-data access:** `LIFE_HUB_TOKEN` is this project's own hub token,
-  enrolled with a Life Data profile granting exactly
+- **soma access:** `SOMA_HUB_TOKEN` is this project's own hub token,
+  enrolled with a Soma profile granting exactly
   `tables:read:bookmarks` and `tables:write:bookmarks` (no other table, no
   file, admin or catalog-write grant). The Worker reads the `bookmarks`
   table's GitHub-repository rows including tombstones (`POST /v1/rows/pull`,
@@ -56,7 +56,7 @@ bookmarks.tags --options ...`, then `life doc` for the life-map) before it
   `deleted_at = updated_at`, `updated_at` ISO-8601 UTC ms). The catalog
   enforces the one-bookmark-per-url and Github-tag rules; a rejected row is
   reported in the run summary and its repo is re-planned next run. Never deploy
-  the agent's hub token. The hub is reached through the `LIFE_HUB` service
+  the agent's hub token. The hub is reached through the `SOMA_HUB` service
   binding (wrangler.jsonc `services`): a Worker cannot fetch a sibling
   workers.dev Worker over the network (Cloudflare error 1042). The binding
   only carries the same HTTP request the URL would; auth is still the token.

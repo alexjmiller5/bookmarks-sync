@@ -1,5 +1,5 @@
 import { fetchStarredRepos, fetchLists, lookupRepos, mutate, type Mutation } from './github';
-import { fetchBookmarks, fetchListTags, writeRows, type HubEnv } from './lifedata';
+import { fetchBookmarks, fetchListTags, writeRows, type HubEnv } from './somadata';
 import { keysToLookup, planSync, type Base, type RepoPlan } from './plan';
 
 /** GitHub writes per run. GitHub's content-creation limits are about 80/min and 500/h. */
@@ -118,7 +118,7 @@ export async function runSync(
 	}
 	if (dryRun) return finish();
 
-	// life-data writes are cheap and uncapped
+	// soma writes are cheap and uncapped
 	const rows = await writeRows(env, [...plan.reviews, ...plan.repos.flatMap((p) => p.rows)]);
 	summary.errors.push(...rows.errors);
 	const ok = new Map<string, boolean>();

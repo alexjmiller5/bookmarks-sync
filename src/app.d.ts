@@ -6,7 +6,7 @@ declare global {
 	interface Env {
 		GITHUB_TOKEN: string;
 		GITHUB_PUBLIC_TOKEN: string;
-		LIFE_HUB_TOKEN: string;
+		SOMA_HUB_TOKEN: string;
 		SYNC_TOKEN: string;
 	}
 

@@ -128,8 +128,8 @@ it('preserves deleted rows and private discovery while writing public stars thro
 	const env = {
 		GITHUB_TOKEN: 'fine',
 		GITHUB_PUBLIC_TOKEN: 'public',
-		LIFE_HUB_URL: 'https://hub.example',
-		LIFE_HUB_TOKEN: 'life'
+		SOMA_HUB_URL: 'https://hub.example',
+		SOMA_HUB_TOKEN: 'life'
 	};
 	const state = {
 		load: async () => base,

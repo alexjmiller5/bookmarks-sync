@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, afterEach } from 'vitest';
-import { fetchBookmarks, fetchListTags, writeRows } from './lifedata';
+import { fetchBookmarks, fetchListTags, writeRows } from './somadata';
 
-const env = { LIFE_HUB_URL: 'https://hub.example/', LIFE_HUB_TOKEN: 'tok' };
+const env = { SOMA_HUB_URL: 'https://hub.example/', SOMA_HUB_TOKEN: 'tok' };
 
 function jsonResponse(body: unknown, status = 200) {
 	return new Response(JSON.stringify(body), {
@@ -100,11 +100,11 @@ describe('fetchBookmarks', () => {
 		expect(body(fetchMock, 1)).toMatchObject({ limit: 200, after: 'a' });
 	});
 
-	it('goes through the LIFE_HUB service binding when one is bound', async () => {
+	it('goes through the SOMA_HUB service binding when one is bound', async () => {
 		const bound = vi.fn().mockResolvedValue(jsonResponse({ rows: [] }));
 		const global = vi.fn();
 		vi.stubGlobal('fetch', global);
-		await fetchBookmarks({ ...env, LIFE_HUB: { fetch: bound } });
+		await fetchBookmarks({ ...env, SOMA_HUB: { fetch: bound } });
 		expect(bound).toHaveBeenCalledTimes(1);
 		expect(global).not.toHaveBeenCalled();
 	});

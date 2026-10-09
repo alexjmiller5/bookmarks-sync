@@ -117,7 +117,7 @@ describe('planSync membership', () => {
 		expect(r.target).toBeNull();
 	});
 
-	it('bookmark deleted in life-data after a sync: the repo is unstarred', () => {
+	it('bookmark deleted in soma after a sync: the repo is unstarred', () => {
 		const p = plan({ base: { repos: { R1: entry(1) } }, stars: [repo(1)] });
 		const r = only(p, 'R1');
 		expect(r.github).toEqual([{ kind: 'unstar' }]);
@@ -184,13 +184,13 @@ describe('planSync lists and tags', () => {
 		expect(r.target).toEqual(entry(1, []));
 	});
 
-	it('tag added in life-data: the repo joins that list', () => {
+	it('tag added in soma: the repo joins that list', () => {
 		const r = only(synced([], ['Learning Material'], []), 'R1');
 		expect(r.github).toEqual([{ kind: 'setLists', lists: ['Learning Material'] }]);
 		expect(r.rows).toEqual([]);
 	});
 
-	it('tag removed in life-data: the repo leaves that list', () => {
+	it('tag removed in soma: the repo leaves that list', () => {
 		const r = only(synced(['Job Search'], [], ['Job Search']), 'R1');
 		expect(r.github).toEqual([{ kind: 'setLists', lists: [] }]);
 	});

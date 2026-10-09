@@ -1,6 +1,6 @@
 # bookmarks-sync
 
-Two-way sync between GitHub and the life-data `bookmarks` table. Every
+Two-way sync between GitHub and the soma `bookmarks` table. Every
 starred repo is a bookmark tagged "Github" and every GitHub bookmark is a
 star; GitHub list membership mirrors the bookmark's other tags. Runs as a
 Cloudflare Worker: an hourly CF cron trigger plus a manual sync endpoint,
@@ -17,7 +17,7 @@ Architecture notes:
 
 ## Sync semantics
 
-- **Three-way merge.** Each run compares GitHub and life-data against the
+- **Three-way merge.** Each run compares GitHub and soma against the
   base. Whichever side differs from the base changed, so its value wins:
   - star a repo: a bookmark is created; unstar it: its bookmarks are
     soft-deleted.
@@ -51,7 +51,7 @@ Architecture notes:
   `owner/repo` for both text fields.
 
 Core logic lives in `src/lib/sync/`: `plan.ts` is the pure merge,
-`github.ts` and `lifedata.ts` are the API layers, and `run.ts` applies a
+`github.ts` and `somadata.ts` are the API layers, and `run.ts` applies a
 plan. Each file has vitest specs alongside. Every run emits one structured
 `sync_run` JSON log line, visible via `just logs`.
 
@@ -121,17 +121,17 @@ runtime secrets on pushes to main. The only GitHub secret is the project's
    source-code access. Fine-grained PATs cannot perform these public/list
    writes with the tested permissions; see
    [GitHub token limitations](https://docs.github.com/en/authentication/keeping-your-account-and-data-secure/managing-your-personal-access-tokens).
-2. Have the Life Data operator add an enrollment profile granting
+2. Have the Soma operator add an enrollment profile granting
    `tables:read:bookmarks` and `tables:write:bookmarks`, then enroll this
    server with it in two steps and store the printed token as
-   `LIFE_HUB_TOKEN`:
+   `SOMA_HUB_TOKEN`:
 
    ```bash
-   life login --profile <id> --name "Bookmarks Sync server" --start pending.json
-   life login --claim pending.json --wait   # after the owner approves the URL
+   soma login --profile <id> --name "Bookmarks Sync server" --start pending.json
+   soma login --claim pending.json --wait   # after the owner approves the URL
    ```
 
-3. Set the hub URL in `wrangler.jsonc` under `vars.LIFE_HUB_URL`.
+3. Set the hub URL in `wrangler.jsonc` under `vars.SOMA_HUB_URL`.
 4. Bootstrap from a desktop-authenticated 1Password shell:
 
    ```bash
@@ -148,7 +148,7 @@ runtime secrets on pushes to main. The only GitHub secret is the project's
    the deploy workflow succeeded.
 
 The project owns its Worker, cron, vault, and deployment token. It consumes
-GitHub and the life-data hub through their supported APIs.
+GitHub and the soma hub through their supported APIs.
 Cloudflare's Workers Scripts Write permission applies to the deployment
 account, so token separation gives independent rotation without enforcing
 per-Worker access. The provisioner grants no R2, D1, DNS, or Access permissions.
