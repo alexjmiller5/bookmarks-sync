@@ -45,7 +45,7 @@ bookmarks.tags --options ...`, then `soma doc` for the soma-map) before it
   before its recorded expiration, store it in this project's ENV item, and
   verify complete reads and routed writes. Never deploy an agent credential.
 - **soma access:** `SOMA_HUB_TOKEN` is this project's own hub token,
-  enrolled with a Soma profile granting exactly
+  enrolled with the Soma profile `bookmarks-sync-writer-v1`, granting exactly
   `tables:read:bookmarks` and `tables:write:bookmarks` (no other table, no
   file, admin or catalog-write grant). The Worker reads the `bookmarks`
   table's GitHub-repository rows including tombstones (`POST /v1/rows/pull`,
