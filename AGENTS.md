@@ -48,8 +48,8 @@ bookmarks.tags --options ...`, then `soma doc` for the soma-map) before it
   enrolled with the Soma profile `bookmarks-sync-writer-v1`, granting exactly
   `tables:read:bookmarks` and `tables:write:bookmarks` (no other table, no
   file, admin or catalog-write grant). The Worker reads the `bookmarks`
-  table's GitHub-repository rows including tombstones (`POST /v1/rows/pull`,
-  200-row pages following `next_cursor`) and the tag vocabulary
+  table's GitHub-repository rows including tombstones (`POST /v1/rows/pull`
+  as one `{batch:[...]}` pull of up to 5,000 rows, following `next_cursor`) and the tag vocabulary
   (`GET /v1/catalog/options?table=bookmarks&column=tags`), and
   pushes catalog-valid rows grouped by column set (`POST /v1/rows/push`: new
   bookmarks, sparse tag and `needs_review` updates, soft deletes with
