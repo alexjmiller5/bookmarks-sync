@@ -10,6 +10,9 @@ function jsonResponse(body: unknown, status = 200) {
 	});
 }
 const body = (m: ReturnType<typeof vi.fn>, i = 0) => JSON.parse(m.mock.calls[i][1].body);
+// The hub answers a batched pull with one page per pull asked.
+const pages = (...list: Array<{ rows: unknown[]; next_cursor?: string | null }>) =>
+	jsonResponse({ batch: list.map((p) => ({ next_cursor: null, ...p })) });
 
 afterEach(() => {
 	vi.unstubAllGlobals();
@@ -18,7 +21,7 @@ afterEach(() => {
 describe('fetchBookmarks', () => {
 	it('keeps repository rows and deletion history and parses tags', async () => {
 		const fetchMock = vi.fn().mockResolvedValue(
-			jsonResponse({
+			pages({
 				rows: [
 					{
 						id: 'a',
@@ -74,13 +77,18 @@ describe('fetchBookmarks', () => {
 		expect(url).toBe('https://hub.example/v1/rows/pull');
 		expect(init.headers['Authorization']).toBe('Bearer tok');
 		expect(body(fetchMock)).toEqual({
-			table: 'bookmarks',
-			columns: ['id', 'url', 'tags', 'needs_review', 'deleted_at'],
-			limit: 200
+			batch: [
+				{
+					table: 'bookmarks',
+					columns: ['id', 'url', 'tags', 'needs_review', 'deleted_at'],
+					since: '',
+					limit: 5000
+				}
+			]
 		});
 	});
 
-	it('follows next_cursor until the last page, since a table-scoped pull returns 200 rows at most', async () => {
+	it('follows next_cursor until the last page of the batched pull', async () => {
 		const row = (id: string) => ({
 			id,
 			url: `https://github.com/o/${id}`,
@@ -90,18 +98,18 @@ describe('fetchBookmarks', () => {
 		});
 		const fetchMock = vi
 			.fn()
-			.mockResolvedValueOnce(jsonResponse({ rows: [row('a')], next_cursor: 'a' }))
-			.mockResolvedValueOnce(jsonResponse({ rows: [row('b')], next_cursor: null }));
+			.mockResolvedValueOnce(pages({ rows: [row('a')], next_cursor: 'a' }))
+			.mockResolvedValueOnce(pages({ rows: [row('b')] }));
 		vi.stubGlobal('fetch', fetchMock);
 
 		expect((await fetchBookmarks(env)).map((b) => b.id)).toEqual(['a', 'b']);
 		expect(fetchMock).toHaveBeenCalledTimes(2);
-		expect(body(fetchMock, 0).after).toBeUndefined();
-		expect(body(fetchMock, 1)).toMatchObject({ limit: 200, after: 'a' });
+		expect(body(fetchMock, 0).batch[0].after).toBeUndefined();
+		expect(body(fetchMock, 1).batch[0]).toMatchObject({ limit: 5000, after: 'a' });
 	});
 
 	it('goes through the SOMA_HUB service binding when one is bound', async () => {
-		const bound = vi.fn().mockResolvedValue(jsonResponse({ rows: [] }));
+		const bound = vi.fn().mockResolvedValue(pages({ rows: [] }));
 		const global = vi.fn();
 		vi.stubGlobal('fetch', global);
 		await fetchBookmarks({ ...env, SOMA_HUB: { fetch: bound } });
