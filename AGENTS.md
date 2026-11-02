@@ -102,6 +102,9 @@ options live in `vite.config.ts` inside the `sveltekit()` plugin.
 
 ## UI conventions
 
+- The project favicon is a violet bookmark with opposing sync arrows, using
+  explicit SVG fills and strokes for light and dark tab backgrounds.
+
 - ALL design tokens (colors, fonts, spacing, radii) go in the `@theme` block
   in `src/routes/layout.css`. Components consume tokens, never raw values.
 - Icons: heroicons.com ONLY — never emojis or generic unicode.
