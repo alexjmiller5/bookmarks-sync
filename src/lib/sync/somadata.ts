@@ -35,18 +35,26 @@ type BookmarkRow = {
 
 /** GitHub repository bookmarks, including tombstones so intentional deletions survive first sync. */
 export async function fetchBookmarks(env: HubEnv): Promise<Bookmark[]> {
-	// A table-scoped token gets at most 200 rows per pull: walk every page.
+	// A batched pull answers up to 5,000 rows (the hub's batch budget): one
+	// request for the whole table, walking pages past that.
 	const rows: BookmarkRow[] = [];
 	let after: string | undefined;
 	do {
-		const page = await hub<{ rows: BookmarkRow[]; next_cursor?: string | null }>(
+		const {
+			batch: [page]
+		} = await hub<{ batch: Array<{ rows: BookmarkRow[]; next_cursor?: string | null }> }>(
 			env,
 			'/v1/rows/pull',
 			{
-				table: 'bookmarks',
-				columns: ['id', 'url', 'tags', 'needs_review', 'deleted_at'],
-				limit: 200,
-				...(after ? { after } : {})
+				batch: [
+					{
+						table: 'bookmarks',
+						columns: ['id', 'url', 'tags', 'needs_review', 'deleted_at'],
+						since: '',
+						limit: 5000,
+						...(after ? { after } : {})
+					}
+				]
 			}
 		);
 		rows.push(...page.rows);
