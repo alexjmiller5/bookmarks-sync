@@ -1,3 +1,11 @@
+<svelte:head>
+	<title>Bookmarks Sync</title>
+	<meta
+		name="description"
+		content="Two-way sync between GitHub stars and lists and Soma bookmarks and tags"
+	/>
+</svelte:head>
+
 <!-- ponytail: static page; a live last-run summary would need the Durable Object
      exposed over GET. Run history lives in `just logs` (structured sync_run lines). -->
 <main class="mx-auto max-w-md p-8">
