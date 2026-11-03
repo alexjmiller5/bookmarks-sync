@@ -129,5 +129,5 @@ not a script catalog; one-offs go in `scripts/` and run directly.
 Write the test first (`*.spec.ts` next to the code, or `src/**/*.svelte.spec.ts`
 for components), then the code. Tests mock all HTTP — CI
 (`.github/workflows/ci.yml`: `just check` + `just test` on push/PR) needs no
-secrets. `.github/workflows/deploy.yml` tests, builds, deploys, and syncs
+secrets. `.github/workflows/deploy.yml` checks types and Svelte diagnostics, tests, builds, deploys, and syncs
 runtime secrets on pushes to main using the project's own deployment token.

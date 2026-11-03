@@ -28,6 +28,7 @@ jobs:
           CLOUDFLARE_API_TOKEN: op://Bookmarks Sync/Bookmarks Sync CI Cloudflare Token/api-token
           CLOUDFLARE_ACCOUNT_ID: op://Bookmarks Sync/Bookmarks Sync CI Cloudflare Token/account-id
       - run: bun install --frozen-lockfile
+      - run: bun run check
       - run: bun run test
       - run: bun run build
       - run: bunx wrangler deploy
