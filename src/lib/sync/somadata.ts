@@ -3,24 +3,18 @@ import { repoKey, type Bookmark, type RowOp } from './plan';
 export interface HubEnv {
 	SOMA_HUB_URL: string;
 	SOMA_HUB_TOKEN: string;
-	/** Service binding to the hub Worker; a plain fetch is used when absent (tests, local dev). */
-	SOMA_HUB?: { fetch: typeof fetch };
 }
 
 async function hub<T>(env: HubEnv, path: string, body?: unknown): Promise<T> {
-	// Call through the binding object: a detached `fetch` throws Illegal invocation.
-	const res = await (env.SOMA_HUB ?? globalThis).fetch(
-		`${env.SOMA_HUB_URL.replace(/\/$/, '')}${path}`,
-		{
-			method: body === undefined ? 'GET' : 'POST',
-			headers: {
-				Authorization: `Bearer ${env.SOMA_HUB_TOKEN}`,
-				'Content-Type': 'application/json',
-				'User-Agent': 'bookmarks-sync'
-			},
-			body: body === undefined ? undefined : JSON.stringify(body)
-		}
-	);
+	const res = await globalThis.fetch(`${env.SOMA_HUB_URL.replace(/\/$/, '')}${path}`, {
+		method: body === undefined ? 'GET' : 'POST',
+		headers: {
+			Authorization: `Bearer ${env.SOMA_HUB_TOKEN}`,
+			'Content-Type': 'application/json',
+			'User-Agent': 'bookmarks-sync'
+		},
+		body: body === undefined ? undefined : JSON.stringify(body)
+	});
 	if (!res.ok) throw new Error(`soma ${path} ${res.status}: ${await res.text()}`);
 	return (await res.json()) as T;
 }

@@ -6,4 +6,5 @@
 GITHUB_TOKEN=op://Bookmarks Sync/Bookmarks Sync ENV/GITHUB_TOKEN
 GITHUB_PUBLIC_TOKEN=op://Bookmarks Sync/Bookmarks Sync ENV/GITHUB_PUBLIC_TOKEN
 SOMA_HUB_TOKEN=op://Bookmarks Sync/Bookmarks Sync ENV/SOMA_HUB_TOKEN
+SOMA_HUB_URL=op://Bookmarks Sync/Bookmarks Sync ENV/SOMA_HUB_URL
 SYNC_TOKEN=op://Bookmarks Sync/Bookmarks Sync ENV/SYNC_TOKEN

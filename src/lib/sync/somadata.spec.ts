@@ -108,13 +108,26 @@ describe('fetchBookmarks', () => {
 		expect(body(fetchMock, 1).batch[0]).toMatchObject({ limit: 5000, after: 'a' });
 	});
 
-	it('goes through the SOMA_HUB service binding when one is bound', async () => {
+	it('uses the configured public URL even if a stale service binding is present', async () => {
+		const bound = vi.fn().mockRejectedValue(new Error('retired binding'));
+		const publicFetch = vi.fn().mockResolvedValue(pages({ rows: [] }));
+		vi.stubGlobal('fetch', publicFetch);
+		const staleEnv = { ...env, SOMA_HUB: { fetch: bound } };
+		await fetchBookmarks(staleEnv);
+		expect(publicFetch).toHaveBeenCalledWith(
+			'https://hub.example/v1/rows/pull',
+			expect.any(Object)
+		);
+		expect(publicFetch.mock.calls[0][1].headers.Authorization).toBe('Bearer tok');
+		expect(bound).not.toHaveBeenCalled();
+	});
+
+	it('does not use a stale binding when the public URL refuses access', async () => {
 		const bound = vi.fn().mockResolvedValue(pages({ rows: [] }));
-		const global = vi.fn();
-		vi.stubGlobal('fetch', global);
-		await fetchBookmarks({ ...env, SOMA_HUB: { fetch: bound } });
-		expect(bound).toHaveBeenCalledTimes(1);
-		expect(global).not.toHaveBeenCalled();
+		vi.stubGlobal('fetch', vi.fn().mockResolvedValue(new Response('denied', { status: 403 })));
+		const staleEnv = { ...env, SOMA_HUB: { fetch: bound } };
+		await expect(fetchBookmarks(staleEnv)).rejects.toThrow('403');
+		expect(bound).not.toHaveBeenCalled();
 	});
 
 	it('throws on a non-2xx hub response', async () => {

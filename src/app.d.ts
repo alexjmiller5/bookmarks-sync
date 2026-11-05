@@ -7,6 +7,7 @@ declare global {
 		GITHUB_TOKEN: string;
 		GITHUB_PUBLIC_TOKEN: string;
 		SOMA_HUB_TOKEN: string;
+		SOMA_HUB_URL: string;
 		SYNC_TOKEN: string;
 	}
 

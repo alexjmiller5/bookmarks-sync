@@ -30,9 +30,9 @@ bookmarks.tags --options ...`, then `soma doc` for the soma-map) before it
   account. Cloudflare enforces that permission at account scope, so separate
   tokens provide independent rotation but do not prevent access to sibling
   Workers. CI has no DNS, R2, D1, or Access administration permissions.
-- Secrets: `GITHUB_TOKEN`, `GITHUB_PUBLIC_TOKEN`, `SOMA_HUB_TOKEN`, `SYNC_TOKEN` (see `.env.tpl`;
-  vault `Bookmarks Sync`). Plain config (`SOMA_HUB_URL`) lives under `vars`
-  in wrangler.jsonc, not in `.env.tpl`.
+- Runtime settings: `GITHUB_TOKEN`, `GITHUB_PUBLIC_TOKEN`, `SOMA_HUB_TOKEN`, `SOMA_HUB_URL`,
+  `SYNC_TOKEN` live in the owning project's ENV item (see `.env.tpl`; vault
+  `Bookmarks Sync`). CI delivers them as Worker secrets.
 - **GitHub access:** both PATs are independently minted for this project.
   `GITHUB_TOKEN` is fine-grained: Starring read/write and Metadata read on
   owned repositories, for complete reads (including private stars) and
@@ -56,10 +56,10 @@ bookmarks.tags --options ...`, then `soma doc` for the soma-map) before it
   `deleted_at = updated_at`, `updated_at` ISO-8601 UTC ms). The catalog
   enforces the one-bookmark-per-url and Github-tag rules; a rejected row is
   reported in the run summary and its repo is re-planned next run. Never deploy
-  the agent's hub token. The hub is reached through the `SOMA_HUB` service
-  binding (wrangler.jsonc `services`): a Worker cannot fetch a sibling
-  workers.dev Worker over the network (Cloudflare error 1042). The binding
-  only carries the same HTTP request the URL would; auth is still the token.
+  the agent's hub token. The hub is reached by public fetch to configured
+  `SOMA_HUB_URL`, authenticated by this project's scoped token. The
+  `global_fetch_strictly_public` compatibility flag supports same-account
+  workers.dev requests without a cross-project service binding.
 - **Cron**: hourly via `triggers.crons` in wrangler.jsonc; each run spends at
   most `MAX_GITHUB_WRITES` GitHub writes and refuses to remove more than
   `MAX_REMOVALS` repos (`run.ts`). Manual runs via `POST /api/sync` with

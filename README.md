@@ -131,7 +131,9 @@ runtime secrets on pushes to main. The only GitHub secret is the project's
    soma login --claim pending.json --wait   # after the owner approves the URL
    ```
 
-3. Set the hub URL in `wrangler.jsonc` under `vars.SOMA_HUB_URL`.
+3. Set `SOMA_HUB_URL` in the project's ENV item referenced by `.env.tpl`.
+   CI delivers it with the other runtime settings. Requests use this URL over
+   public HTTP with the project's scoped hub credential.
 4. Bootstrap from a desktop-authenticated 1Password shell:
 
    ```bash
